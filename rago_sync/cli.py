@@ -110,8 +110,12 @@ def verify(all_entries: bool = typer.Option(False, "--all")):
 def status():
     """Print current status.json in a human-readable table."""
     state_manager = StateManager()
+    entries = state_manager.all_entries()
+    if not entries:
+        rprint("No entries tracked yet. Run [bold]rago-sync detect[/bold] first.")
+        return
     table = Table("Entry Path", "State", "Last Checked")
-    for path, s in sorted(state_manager.all_entries().items()):
+    for path, s in sorted(entries.items()):
         style = STATE_STYLE.get(s.state, "white")
         table.add_row(path, s.state, s.last_checked, style=style)
     console.print(table)
