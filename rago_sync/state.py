@@ -31,6 +31,7 @@ class EntryStatus:
     latest: Optional[str] = None
     breaking: Optional[bool] = None
     issues: list = field(default_factory=list)
+    package: str = ""
 
 
 class StateManager:

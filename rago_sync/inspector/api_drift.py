@@ -20,9 +20,9 @@ def is_stale_import(identifier: str, removed_set: set[str]) -> bool:
 
 
 def identifier_in_main(identifier: str) -> bool:
-    """Check if identifier exists anywhere in gl-sdk main libs/."""
+    """Check if identifier exists in gl-sdk main (HEAD) libs/."""
     result = subprocess.run(
-        ["git", "grep", "-r", "--quiet", identifier, "--", "libs/"],
+        ["git", "grep", "-r", "--quiet", identifier, "HEAD", "--", "libs/"],
         cwd=GL_SDK_REPO, capture_output=True,
     )
     return result.returncode == 0

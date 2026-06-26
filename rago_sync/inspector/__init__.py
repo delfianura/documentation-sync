@@ -31,6 +31,14 @@ def run_detect(state_manager: StateManager) -> dict[str, EntryStatus]:
     now = datetime.now(timezone.utc).isoformat()
     results: dict[str, EntryStatus] = {}
 
+    # Auth before version checks
+    try:
+        from ..auth import refresh_token
+        refresh_token()
+    except Exception as exc:
+        import logging
+        logging.getLogger(__name__).warning("refresh_token failed: %s", exc)
+
     # Phase 1: handle PENDING_REVIEW entries
     for entry_path, status in state_manager.pending_review_entries().items():
         pr_state = _poll_pr_state(status.pr_number)
@@ -99,6 +107,7 @@ def run_detect(state_manager: StateManager) -> dict[str, EntryStatus]:
                 last_checked=now,
                 pinned=stale[pkg]["constraint"],
                 latest=stale[pkg]["latest"],
+                package=pkg,
             )
             continue
 
