@@ -1,0 +1,6 @@
+.venv/
+status.json
+report.html
+__pycache__/
+*.pyc
+.superpowers/
