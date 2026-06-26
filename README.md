@@ -141,6 +141,29 @@ uv run pytest tests/ -v
 
 ---
 
+## Triggering via Claude Code CLI
+
+If you use Claude Code, you can trigger rago-sync with natural language or slash commands instead of typing CLI commands directly. Install the included skills:
+
+```bash
+cp -r skills/sync-cookbook ~/.claude/skills/
+cp -r skills/rag-o-doc-sync-orchestrator ~/.claude/skills/
+```
+
+Then in Claude Code:
+
+```
+/sync-cookbook detect
+/sync-cookbook sync --entry tutorials/inference/lm_invoker
+run detect
+what's drifted?
+sync everything
+```
+
+See [`skills/README.md`](skills/README.md) for full installation and usage.
+
+---
+
 ## Project layout
 
 ```
@@ -153,4 +176,7 @@ rago_sync/
   syncer/             # Write actions (cookbook_updater, migration, lock_manager)
   verifier/           # uv run verification loop
   reporter/           # HTML report + GitHub issue creation + email
+skills/
+  sync-cookbook/      # Claude Code skill (LLM bridge to CLI)
+  rag-o-doc-sync-orchestrator/  # Full flow orchestrator skill
 ```
