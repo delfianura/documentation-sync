@@ -77,12 +77,32 @@ def create_entry(entry_path: str, gitbook_content: str) -> bool:
 
     # setup.sh
     (entry_dir / "setup.sh").write_text(
-        "#!/bin/bash\nuv sync\n"
+        'echo "Setting up UV authentication..."\n'
+        'export UV_INDEX_GEN_AI_INTERNAL_USERNAME=oauth2accesstoken\n'
+        'export UV_INDEX_GEN_AI_INTERNAL_PASSWORD="$(gcloud auth print-access-token)"\n'
+        '\n'
+        'echo "Installing dependencies via UV..."\n'
+        'uv lock\n'
+        'uv sync\n'
+        '\n'
+        'echo "Setup completed successfully!"\n'
     )
 
     # setup.bat
     (entry_dir / "setup.bat").write_text(
-        "@echo off\nuv sync\n"
+        '@echo off\n'
+        '\n'
+        'REM Setup script for Windows systems\n'
+        '\n'
+        'echo Setting up UV authentication...\n'
+        'set UV_INDEX_GEN_AI_INTERNAL_USERNAME=oauth2accesstoken\n'
+        'for /f "delims=" %%i in (\'gcloud auth print-access-token\') do set UV_INDEX_GEN_AI_INTERNAL_PASSWORD=%%i\n'
+        '\n'
+        'echo Installing dependencies via UV...\n'
+        'uv lock\n'
+        'uv sync\n'
+        '\n'
+        'echo Setup completed successfully!\n'
     )
 
     # README.md
@@ -95,13 +115,25 @@ def create_entry(entry_path: str, gitbook_content: str) -> bool:
     dep_lines = "\n".join(
         f'    "{pkg}>=0.6.0,<0.7.0",' for pkg in gllm_pkgs
     )
+    source_lines = "\n".join(
+        f'{pkg} = {{ index = "gen-ai-internal" }}' for pkg in gllm_pkgs
+    )
     pyproject = f"""[project]
 name = "{entry_name}"
-version = "0.1.0"
-requires-python = ">=3.12"
+version = "0.0.0"
+description = "{entry_name} usage example"
+requires-python = ">=3.11,<3.14"
+readme = "README.md"
 dependencies = [
 {dep_lines}
 ]
+
+[[tool.uv.index]]
+name = "gen-ai-internal"
+url = "https://glsdk.gdplabs.id/gen-ai-internal/simple/"
+
+[tool.uv.sources]
+{source_lines}
 """
     (entry_dir / "pyproject.toml").write_text(pyproject)
 

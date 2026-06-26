@@ -57,11 +57,54 @@ uv run rago-sync <command> [options]
 | `COMPLIANT` | All good | — |
 | `MISSING` | No cookbook entry for a Gitbook page | Yes — creates 7-file entry |
 | `TEMPLATE_MISSING` | Required files absent | Yes — recreates entry |
-| `CONTENT_DRIFT` | Cookbook script diverged from Gitbook | Yes — overwrites script |
+| `CONTENT_DRIFT` | Cookbook script diverged from Gitbook | Yes — overwrites script from Gitbook |
 | `VERSION_STALE` | pyproject.toml behind latest published version | Yes — updates constraint + uv lock |
 | `GITBOOK_DRIFT` | Gitbook code uses removed API | Opens GitHub issue (human must fix) |
 | `NOT_RUNNABLE` | uv run fails | Retries verify; escalates to human if still failing |
 | `PENDING_REVIEW` | PR open for this entry | Paused; resumes after PR merged/closed |
+
+## Known gotchas (from real usage)
+
+### 1. Sparse checkout — entries appear MISSING when they are not
+
+The cookbook repo may use sparse checkout. If `gen-ai/tutorials/` is not checked out locally, `detect` will mark everything in it as `MISSING` even though the entries exist on `main`.
+
+Before running detect, check:
+```bash
+git -C /home/delfia-n-a-putri/Documents/Work/GEN_AI/gen-ai-sdk-cookbook sparse-checkout list
+```
+
+If the section you care about is missing, add it:
+```bash
+git -C /home/delfia-n-a-putri/Documents/Work/GEN_AI/gen-ai-sdk-cookbook sparse-checkout add gen-ai/tutorials/inference
+git -C /home/delfia-n-a-putri/Documents/Work/GEN_AI/gen-ai-sdk-cookbook checkout
+```
+
+Also verify the branch:
+```bash
+git -C /home/delfia-n-a-putri/Documents/Work/GEN_AI/gen-ai-sdk-cookbook branch --show-current
+```
+
+If it is not `main`, switch first: `git -C ... checkout main`
+
+### 2. CONTENT_DRIFT sync overwrites the whole script
+
+`sync` on a `CONTENT_DRIFT` entry replaces the `.py` file with the first Python block from Gitbook. If the cookbook script has additions that are not in Gitbook (e.g. `catalog = PromptBuilderCatalog.from_records(records=records)`), those lines will be lost.
+
+Before syncing CONTENT_DRIFT entries, inspect what will be overwritten:
+```bash
+cat /home/delfia-n-a-putri/Documents/Work/GEN_AI/gen-ai-sdk-cookbook/gen-ai/<entry_path>/*.py
+```
+
+If the file has intentional local additions, do not run `sync` on that entry. Restore manually after if needed.
+
+### 3. `source` field required for correct Gitbook content lookup
+
+The `source` field in `status.json` stores the original Gitbook-relative path (e.g. `tutorials/inference/lm-invoker/README.md`). The entry key is the cookbook path (e.g. `tutorials/inference/lm_invoker`). `sync` uses `source` internally to fetch the right Gitbook page. If `source` is missing from a status entry (old detect run), re-run `detect` before syncing.
+
+### 4. NOT_RUNNABLE after sync is expected for credential-dependent entries
+
+Entries that require Google service account credentials will always be `NOT_RUNNABLE` locally without auth. The generated code is valid — it just cannot execute without real credentials. This is not a bug.
 
 ## Cron
 

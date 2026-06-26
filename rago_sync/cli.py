@@ -31,7 +31,7 @@ STATE_STYLE = {
 def detect(email: bool = typer.Option(False, "--email", help="Send email report")):
     """Run all inspector checks. Read-only. Writes status.json and report.html."""
     rprint("[bold]Running RAGO detect...[/bold]")
-    state_manager = StateManager()
+    state_manager = StateManager(path=STATUS_FILE)
     results = run_detect(state_manager)
     for path, status in results.items():
         state_manager.set(path, status)
@@ -46,7 +46,7 @@ def sync(
 ):
     """Sync drifted entries. Opens PRs and creates issues. MANUAL TRIGGER ONLY."""
     require_auth()
-    state_manager = StateManager()
+    state_manager = StateManager(path=STATUS_FILE)
     entries = state_manager.all_entries()
 
     targets = {entry: entries[entry]} if entry else {
@@ -67,7 +67,7 @@ def sync_all():
     """Initial full sync: detect then sync all non-compliant entries."""
     require_auth()
     rprint("[bold]Running sync-all (initial full sync)...[/bold]")
-    state_manager = StateManager()
+    state_manager = StateManager(path=STATUS_FILE)
     results = run_detect(state_manager)
     for path, status in results.items():
         state_manager.set(path, status)
@@ -94,7 +94,7 @@ def verify(all_entries: bool = typer.Option(False, "--all")):
     """Run uv run on cookbook entries to check runnability."""
     require_auth()
     from .verifier.runner import verify_entry
-    state_manager = StateManager()
+    state_manager = StateManager(path=STATUS_FILE)
     entries = state_manager.all_entries()
     targets = list(entries.keys()) if all_entries else [
         k for k, v in entries.items() if v.state != EntryState.COMPLIANT
@@ -109,7 +109,7 @@ def verify(all_entries: bool = typer.Option(False, "--all")):
 @app.command()
 def status():
     """Print current status.json in a human-readable table."""
-    state_manager = StateManager()
+    state_manager = StateManager(path=STATUS_FILE)
     entries = state_manager.all_entries()
     if not entries:
         rprint("No entries tracked yet. Run [bold]rago-sync detect[/bold] first.")

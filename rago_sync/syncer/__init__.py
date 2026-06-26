@@ -1,5 +1,4 @@
 import re
-import subprocess
 from datetime import datetime, timezone
 
 from ..state import StateManager, EntryState, EntryStatus
@@ -19,13 +18,16 @@ def sync_entry(entry_path: str, state_manager: StateManager) -> str:
         return "SKIPPED"
 
     now = datetime.now(timezone.utc).isoformat()
+    # source is the original Gitbook-relative path (e.g. tutorials/inference/lm-invoker/README.md)
+    # needed for get_page_content which speaks gitbook paths, not cookbook paths
+    gb_source = status.source or entry_path
 
     if status.state == EntryState.GITBOOK_DRIFT:
         return _handle_gitbook_drift(entry_path, status, state_manager, now)
     if status.state == EntryState.CONTENT_DRIFT:
-        return _handle_content_update(entry_path, state_manager, now)
+        return _handle_content_update(entry_path, gb_source, state_manager, now)
     if status.state in (EntryState.MISSING, EntryState.TEMPLATE_MISSING):
-        return _handle_missing(entry_path, state_manager, now)
+        return _handle_missing(entry_path, gb_source, state_manager, now)
     if status.state == EntryState.VERSION_STALE:
         return _handle_version_stale(entry_path, status, state_manager, now)
     if status.state == EntryState.NOT_RUNNABLE:
@@ -34,7 +36,7 @@ def sync_entry(entry_path: str, state_manager: StateManager) -> str:
 
 
 def _handle_gitbook_drift(entry_path, status, state_manager, now):
-    # Fix 4: skip duplicate issue creation
+    # Skip duplicate issue creation
     if status.issues:
         return EntryState.GITBOOK_DRIFT
 
@@ -50,8 +52,8 @@ def _handle_gitbook_drift(entry_path, status, state_manager, now):
     return EntryState.GITBOOK_DRIFT
 
 
-def _handle_content_update(entry_path, state_manager, now):
-    content = get_page_content(entry_path)
+def _handle_content_update(entry_path, gb_source, state_manager, now):
+    content = get_page_content(gb_source)
     overwrite_script(entry_path, content)
     result = verify_entry(entry_path)
     new_state = EntryState.COMPLIANT if result.passed else EntryState.NOT_RUNNABLE
@@ -59,8 +61,8 @@ def _handle_content_update(entry_path, state_manager, now):
     return new_state
 
 
-def _handle_missing(entry_path, state_manager, now):
-    content = get_page_content(entry_path)
+def _handle_missing(entry_path, gb_source, state_manager, now):
+    content = get_page_content(gb_source)
     create_entry(entry_path, content)
     result = verify_entry(entry_path)
     new_state = EntryState.COMPLIANT if result.passed else EntryState.NOT_RUNNABLE
@@ -72,7 +74,6 @@ def _handle_version_stale(entry_path, status, state_manager, now):
     py_files = list((COOKBOOK_REPO / "gen-ai" / entry_path).glob("*.py"))
     cookbook_code = "\n".join(f.read_text() for f in py_files if not f.name.startswith("_"))
 
-    # Fix 2: use status.package instead of hardcoded "gllm-inference"
     package = status.package or "gllm-inference"
 
     from_match = re.search(r">=(\d+\.\d+)", status.pinned or "")
@@ -99,7 +100,7 @@ def _handle_version_stale(entry_path, status, state_manager, now):
 
 
 def _handle_not_runnable(entry_path, state_manager, now):
-    # Fix 5: retry verify, no uv sync
+    # Retry verify only — no uv sync
     result = verify_entry(entry_path)
     if result.passed:
         state_manager.set(entry_path, EntryStatus(state=EntryState.COMPLIANT, last_checked=now))
