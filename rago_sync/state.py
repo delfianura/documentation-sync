@@ -27,6 +27,7 @@ class EntryStatus:
     pr_opened_at: Optional[str] = None
     skip_detect: bool = False
     alerted_at: Optional[str] = None
+    source: Optional[str] = None
     pinned: Optional[str] = None
     latest: Optional[str] = None
     breaking: Optional[bool] = None

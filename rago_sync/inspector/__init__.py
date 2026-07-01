@@ -76,26 +76,26 @@ def run_detect(state_manager: StateManager) -> dict[str, EntryStatus]:
 
         if cookbook_path not in cb_entries:
             results[cookbook_path] = EntryStatus(state=EntryState.MISSING,
-                                                  last_checked=now)
+                                                  last_checked=now, source=gb_rel)
             continue
 
         # run checks cheapest first
         missing_files = check_template(cookbook_path)
         if missing_files:
             results[cookbook_path] = EntryStatus(state=EntryState.TEMPLATE_MISSING,
-                                                  last_checked=now)
+                                                  last_checked=now, source=gb_rel)
             continue
 
         api_missing = check_api_drift(content)
         if api_missing:
             results[cookbook_path] = EntryStatus(state=EntryState.GITBOOK_DRIFT,
-                                                  last_checked=now)
+                                                  last_checked=now, source=gb_rel)
             continue
 
         drift_result = check_content_drift(cookbook_path, content)
         if drift_result == "CONTENT_DRIFT":
             results[cookbook_path] = EntryStatus(state=EntryState.CONTENT_DRIFT,
-                                                  last_checked=now)
+                                                  last_checked=now, source=gb_rel)
             continue
         # NEEDS_LLM_JUDGE treated as COMPLIANT for MVP
 
@@ -105,6 +105,7 @@ def run_detect(state_manager: StateManager) -> dict[str, EntryStatus]:
             results[cookbook_path] = EntryStatus(
                 state=EntryState.VERSION_STALE,
                 last_checked=now,
+                source=gb_rel,
                 pinned=stale[pkg]["constraint"],
                 latest=stale[pkg]["latest"],
                 package=pkg,
@@ -112,6 +113,6 @@ def run_detect(state_manager: StateManager) -> dict[str, EntryStatus]:
             continue
 
         results[cookbook_path] = EntryStatus(state=EntryState.COMPLIANT,
-                                              last_checked=now)
+                                              last_checked=now, source=gb_rel)
 
     return results

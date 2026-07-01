@@ -112,8 +112,19 @@ def create_entry(entry_path: str, gitbook_content: str) -> bool:
 
     # pyproject.toml
     gllm_pkgs = _detect_gllm_packages(script)
+    _VERSIONS = {
+        "gllm-core": ("0.3.0", "0.5.0"),
+        "gllm-retrieval": ("0.5.0", "0.6.0"),
+        "gllm-datastore": ("0.5.0", "0.6.0"),
+        "gllm-inference": ("0.6.0", "0.7.0"),
+    }
+    def _version_lower(pkg: str) -> str:
+        return _VERSIONS.get(pkg, ("0.6.0", "0.7.0"))[0]
+    def _version_upper(pkg: str) -> str:
+        return _VERSIONS.get(pkg, ("0.6.0", "0.7.0"))[1]
     dep_lines = "\n".join(
-        f'    "{pkg}>=0.6.0,<0.7.0",' for pkg in gllm_pkgs
+        f'    "{pkg}>={_version_lower(pkg)},<{_version_upper(pkg)}",'
+        for pkg in gllm_pkgs
     )
     source_lines = "\n".join(
         f'{pkg} = {{ index = "gen-ai-internal" }}' for pkg in gllm_pkgs
