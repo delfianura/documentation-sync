@@ -1,127 +1,92 @@
 ---
 name: rag-o-doc-sync-orchestrator
-description: Orchestrates the full RAG-O documentation sync flow - GitBook update with human review, then Cookbook sync. Use after weekly cron report identifies drift.
+description: Orchestrates the full RAG-O documentation sync flow — GitBook update and/or Cookbook sync, either as a routine drift check or an ad-hoc PR-driven update. Entry point for "update the docs", "sync gitbook and cookbook for PR #X", or the weekly drift report follow-up.
 ---
 
 # RAG-O Documentation Sync Orchestrator
 
-Ties together the weekly detection -> human review -> GitBook update -> Cookbook sync flow.
+Ties together GitBook update (`gitbook-update` skill) and Cookbook sync (`sync-cookbook` skill / rago-sync CLI). Delegates all actual logic to those two skills — this skill only decides **what** to run and **how**.
 
-> **Architecture note (2026-06-26):** Cookbook sync is now backed by the rago-sync Python CLI (`uv run rago-sync`). The `sync-cookbook` skill is the LLM bridge to that CLI. Do NOT reimplement cookbook sync logic here — delegate to the CLI via the `sync-cookbook` skill.
+> Do NOT reimplement GitBook-editing or cookbook-syncing logic here. Delegate to `gitbook-update`, `gitbook-check-for-update`, and `sync-cookbook`.
 
-## Flow
+## Step 1 — Ask what to update (scope)
 
-```
-Weekly Cron Report (Friday 1 PM)
-         |
-         v
-Human reviews email, identifies priority items
-         |
-         v
-Run: /run rag-o-doc-sync-orchestrator --mode=full
-         |
-         +---> GitBook Updates (gitbook-update workflow)
-         |       |
-         |       v
-         |   Human reviews PRs on docs/gitbook-sync
-         |       |
-         |       v
-         |   Merge approved PRs to docs/gitbook-sync
-         |
-         +---> Cookbook Sync (sync-cookbook skill)
-                 |
-                 v
-             Auto-verify runnable
-                 |
-                 v
-             Commit cookbook changes
-```
+Unless the user's request already makes this obvious, ask:
 
-## Modes
+**"Update GitBook, Cookbook, or both?"** (default: **both** — this is what "sync the docs" / "update docs for PR #X" implies unless the user names just one side)
 
-### Mode 1: GitBook Only (`--mode=gitbook`)
-Run `gitbook-update` workflow for specific PRs/components from the weekly report.
+| Scope | What runs |
+|---|---|
+| `gitbook` | `gitbook-update` (+ `gitbook-check-for-update` first if not already scoped) only |
+| `cookbook` | `sync-cookbook` only |
+| `both` (default) | `gitbook-update` first, then `sync-cookbook` for the same change |
 
-```bash
-# Interactive: shows report items, lets you select which to update
-rag-o-doc-sync-orchestrator --mode=gitbook
-```
+## Step 2 — Ask the mode
 
-### Mode 2: Cookbook Only (`--mode=cookbook`)
-Run `sync-cookbook` skill to sync Cookbook with current GitBook state.
+**"Is this a routine drift check, or an ad-hoc update for a specific PR/feature?"**
 
-```bash
-rag-o-doc-sync-orchestrator --mode=cookbook
-```
+| Mode | Trigger | What it means |
+|---|---|---|
+| **Routine check** | weekly cron report, "check for drift", no specific PR named | Discovery-driven — run `gitbook-check-for-update` (full audit or named branch) to find gaps, then `sync-cookbook`'s `detect`/`status` to find cookbook drift, before touching any files |
+| **Ad-hoc update** | user names a specific PR/issue/feature ("update docs for gl-sdk PR #5171") | You already know the change and the affected page(s) — skip discovery, go straight to editing per the procedure below |
 
-### Mode 3: Full Sync (`--mode=full`)
-Sequential: GitBook updates -> wait for review/merge -> Cookbook sync.
+Default to **ad-hoc** whenever a PR number, PR URL, branch name, or specific feature is named in the request. Default to **routine check** when the request is generic ("check gitbook", "what's out of sync", weekly report follow-up).
 
-```bash
-rag-o-doc-sync-orchestrator --mode=full
-```
+## Ad-hoc procedure (scope = gitbook or both)
 
-## Usage
+This is the concrete, verified procedure — not a generic description:
 
-```bash
-# From Hermes CLI
-/run rag-o-doc-sync-orchestrator --mode=full
+1. **Identify the change.** `gh pr view <PR>` to get the diff/summary. Search GitBook (`mcp__claude_ai_Gitbook__searchDocumentation`, then `getPage`) for the page(s) covering the changed component.
+2. **Set up an isolated worktree on `docs/gitbook-sync`:**
+   ```bash
+   git -C <gl-sdk-repo> fetch origin docs/gitbook-sync main
+   git worktree add <worktree-path> origin/docs/gitbook-sync -b docs/<feature-branch-name>
+   ```
+   Never edit `docs/gitbook-sync` directly — always branch off it into a new `docs/*` branch, in a worktree separate from any feature-branch checkout.
+3. **Edit only `gitbook/**` files** in that worktree, following the `gitbook-update` skill's section-type rules (tutorials / how-to guides / resources).
+4. **Verify against the real merged code**, not the doc's claims:
+   - Install the library from that worktree's checked-out commit (`uv pip install -p <venv> -e <path-to-lib>` with `UV_INDEX_GEN_AI_INTERNAL_USERNAME`/`PASSWORD` set from `gcloud auth print-access-token`) and actually run every code example from the doc. If an example fails, fix the doc (or flag a real product bug) before proceeding — never leave a non-runnable example in place "because the PR author verified it."
+5. **Commit only `gitbook/**`, push the branch, open a draft PR against `docs/gitbook-sync`** (not `main`) via `gh pr create --base docs/gitbook-sync`.
 
-# Or with specific items from report
-/run rag-o-doc-sync-orchestrator --mode=gitbook --items="gllm-inference:OpenAILMInvoker,gllm-pipeline:ComponentStep"
-```
+## Ad-hoc procedure (scope = cookbook or both)
 
-## Integration Points
+Runs after (or independent of) the GitBook step above:
 
-| Step | Tool/Skill | Trigger |
-|------|------------|---------|
-| Detect | rag-o-weekly-sync-check (cron) | Friday 1 PM auto |
-| GitBook Update | gitbook-update workflow | Human trigger via orchestrator |
-| Human Review | GitHub PR on docs/gitbook-sync | Manual |
-| Cookbook Sync | sync-cookbook skill | Auto after GitBook merge (or manual) |
+1. **Locate the cookbook entry** for the affected page (`gen-ai/tutorials/... ` etc. in the cookbook repo). If none exists yet, this is effectively a `MISSING` entry — consider `sync-cookbook`'s `sync --entry <path>` to bootstrap it, or `create_entry` conventions if fully ad-hoc.
+2. **Two-way sync gotcha:** if the GitBook docs PR from the previous section is not yet merged, the *live* GitBook page hasn't changed — `rago-sync sync --entry` compares against the live page and won't see it. Edit the cookbook script by hand to mirror the (unmerged) docs PR's diff instead.
+3. **Verify against the real *published* package version**, not source — cookbook entries install from the internal package index, not the gl-sdk repo. A feature just merged to `main` is not necessarily released yet:
+   ```bash
+   cd /home/delfia-n-a-putri/Documents/Work/GEN_AI/Automation/rago-sync
+   uv run python -c "from rago_sync.inspector.versions import get_latest_version; print(get_latest_version('<package>'))"
+   ```
+   If the currently-pinned floor predates the feature, binary-search published versions (download+grep each tarball, or just trust `get_latest_version`) to find the *first* version that has it, and pin the entry's `pyproject.toml` to exactly that version (not a rounded-down `X.Y.0` — see `sync-cookbook` gotcha 6). Re-run `uv lock && uv run <script>.py` and confirm output matches the README.
+4. **Commit, push, open a PR** against the cookbook repo's `main` (separate PR from the GitBook one — different repos).
+
+## Routine-check procedure
+
+1. Run `gitbook-check-for-update` in Full Audit mode (no PR/branch given) or PR/branch mode (if a branch was named) — read-only, produces a gap report.
+2. Run `sync-cookbook`'s `detect`/`status` — read-only, produces cookbook drift state.
+3. Present both reports to the user and ask which items to act on before running the ad-hoc procedure per item.
 
 ## Configuration
 
-```json
-{
-  "gl_sdk_repo": "/home/delfia-n-a-putri/Documents/Work/GEN_AI/gl-sdk",
-  "cookbook_repo": "/home/delfia-n-a-putri/Documents/Work/GEN_AI/gen-ai-sdk-cookbook",
-  "gitbook_branch": "docs/gitbook-sync",
-  "auto_cookbook_after_gitbook": true
-}
-```
-
-## Workflow Details
-
-### GitBook Update Phase
-
-For each selected item from weekly report:
-1. Run `gitbook-update` workflow in PR/Branch mode
-2. Workflow creates docs branch, applies changes per section-type rules
-3. Creates PR to `docs/gitbook-sync`
-4. Human reviews PR (required gate)
-5. On approval, merge to `docs/gitbook-sync`
-
-### Cookbook Sync Phase
-
-After GitBook changes merged, invoke the `sync-cookbook` skill which delegates to the rago-sync CLI:
+Paths are environment-overridable (see `rago_sync/config.py`) so this is reproducible on any machine:
 
 ```bash
-cd /home/delfia-n-a-putri/Documents/Work/GEN_AI/Automation/rago-sync
-uv run rago-sync detect        # see what's drifted
-uv run rago-sync sync          # fix all drifted entries
+export RAGO_SYNC_GL_SDK_REPO=/path/to/gl-sdk
+export RAGO_SYNC_COOKBOOK_REPO=/path/to/gen-ai-sdk-cookbook
 ```
-
-The CLI handles: gap detection, entry creation (7-file structure), script overwrite, version constraint update, verify loop, issue creation, and state persistence. No manual steps needed.
 
 ## Human Gates
 
 | Gate | Decision | Who |
 |------|----------|-----|
 | GitBook PR review | Approve/Request changes | You / assigned author |
-| Cookbook test failures | Fix/skip entry | You / assigned author |
-| Version mismatch resolution | Update pin/skip | You |
+| Cookbook PR review | Approve/Request changes | You / assigned author |
+| Version bump breaking-change check | Fix/skip entry | You (rago-sync auto-opens an issue if `classify_version_bump` flags it breaking) |
 
 ## References
 
-- `references/sync-flow.md` — Complete flow documentation with commands and pitfalls
+- `references/sync-flow.md` — background on the original cron-triggered flow (pre-dates the ad-hoc procedure above)
+- `../gitbook-update/SKILL.md`, `../gitbook-check-for-update/SKILL.md` — GitBook-side detail
+- `../sync-cookbook/SKILL.md` — Cookbook-side detail, including all known gotchas

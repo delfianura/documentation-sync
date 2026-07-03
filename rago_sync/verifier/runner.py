@@ -1,6 +1,7 @@
 import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
+from ..auth import refresh_token
 from ..config import COOKBOOK_REPO, MAX_VERIFY_ITERATIONS
 
 
@@ -32,6 +33,7 @@ def _find_script(entry_path: str) -> Path | None:
 
 
 def _run_script(script: Path, cwd: Path) -> tuple[bool, str]:
+    refresh_token()
     result = subprocess.run(
         ["uv", "run", script.name],
         cwd=cwd, capture_output=True, text=True, timeout=120,
@@ -58,6 +60,11 @@ def verify_entry(entry_path: str) -> VerifyResult:
 
         category = _parse_failure_category(output)
         if i == 1 and category in ("MODULE_NOT_FOUND", "IMPORT_ERROR"):
+            subprocess.run(["uv", "sync"], cwd=cwd, capture_output=True)
+        elif category == "AUTH_ERROR":
+            # Token expired between refresh and the actual request (or index redirected
+            # and dropped auth). Refresh and force a real re-sync, not just a retry.
+            refresh_token()
             subprocess.run(["uv", "sync"], cwd=cwd, capture_output=True)
 
     return VerifyResult(

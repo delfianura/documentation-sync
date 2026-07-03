@@ -173,7 +173,14 @@ def overwrite_script(entry_path: str, gitbook_content: str) -> bool:
 
 
 def update_version_constraint(entry_path: str, package: str, new_version: str) -> bool:
-    """Update pyproject.toml version constraint for package to >=base_minor,<next_minor."""
+    """Update pyproject.toml version constraint for package to >=new_version,<next_minor.
+
+    Pins the lower bound to the exact `new_version` rather than rounding down to
+    `X.Y.0`. Rounding down previously produced the *same* lower bound already
+    satisfied by the stale pinned version (e.g. 0.6.1 -> floor 0.6.0, which a
+    stale 0.6.1 already satisfies), so `uv lock` had no reason to re-resolve and
+    silently kept the old version. Pinning the exact version forces the upgrade.
+    """
     pyproject_path = COOKBOOK_REPO / "gen-ai" / entry_path / "pyproject.toml"
     if not pyproject_path.exists():
         return False
@@ -186,9 +193,8 @@ def update_version_constraint(entry_path: str, package: str, new_version: str) -
     if not pattern.search(text):
         return False
 
-    base = _base_minor(new_version)
-    upper = _next_minor(base)
-    new_constraint = f">={base},<{upper}"
+    upper = _next_minor(_base_minor(new_version))
+    new_constraint = f">={new_version},<{upper}"
 
     new_text = pattern.sub(
         lambda m: m.group(1) + new_constraint,

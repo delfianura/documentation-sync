@@ -1,5 +1,9 @@
+import base64
+import os
 import re
-import subprocess
+import urllib.error
+import urllib.request
+from ..auth import refresh_token
 from ..config import COOKBOOK_REPO, REGISTRY_URL, RAGO_PACKAGES
 
 
@@ -13,18 +17,38 @@ def is_stale(constraint: str, latest: str) -> bool:
     return latest_parts >= upper
 
 
+def _version_key(version: str) -> tuple:
+    return tuple(int(p) for p in re.findall(r"\d+", version))
+
+
 def get_latest_version(package: str) -> str | None:
-    """Query internal registry for latest version via uv pip index."""
-    result = subprocess.run(
-        ["uv", "pip", "index", "versions", package,
-         "--index", REGISTRY_URL],
-        capture_output=True, text=True, timeout=30,
+    """Query internal registry for latest version.
+
+    NOTE: this used to shell out to `uv pip index versions`, but that subcommand
+    no longer exists as of uv 0.9.17 ("error: unrecognized subcommand 'index'").
+    That made this function silently return None for every package, which meant
+    VERSION_STALE was never detected. Query the PEP 503 simple index directly
+    instead.
+    """
+    if not refresh_token():
+        return None
+    token = os.environ.get("UV_INDEX_GEN_AI_INTERNAL_PASSWORD", "")
+    url = REGISTRY_URL.rstrip("/") + "/" + package + "/"
+    req = urllib.request.Request(url)
+    auth = base64.b64encode(f"oauth2accesstoken:{token}".encode()).decode()
+    req.add_header("Authorization", f"Basic {auth}")
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            html = resp.read().decode()
+    except urllib.error.URLError:
+        return None
+
+    dist_name = package.replace("-", "_")
+    versions = sorted(
+        set(re.findall(rf"{re.escape(dist_name)}-([\d.]+(?:\.\d+)*)\.(?:tar\.gz|whl)", html)),
+        key=_version_key,
     )
-    match = re.search(r"Available versions: ([\d., ]+)", result.stdout)
-    if match:
-        versions = [v.strip() for v in match.group(1).split(",") if v.strip()]
-        return versions[0] if versions else None
-    return None
+    return versions[-1] if versions else None
 
 
 def get_pinned_constraints(entry_path: str) -> dict[str, str]:

@@ -106,6 +106,29 @@ The `source` field in `status.json` stores the original Gitbook-relative path (e
 
 Entries that require Google service account credentials will always be `NOT_RUNNABLE` locally without auth. The generated code is valid — it just cannot execute without real credentials. This is not a bug.
 
+### 5. `uv pip index versions` no longer exists (uv 0.9.17+) — fixed upstream
+
+`get_latest_version()` used to shell out to `uv pip index versions <pkg>`. That subcommand was removed and now errors with `unrecognized subcommand 'index'`, so on older builds of rago-sync `VERSION_STALE` was **never detected** — the function silently returned `None` for every package. This has been fixed in rago-sync to query the PEP 503 simple index directly (`GET <registry>/<package>/`, parsed for `pkg-X.Y.Z.tar.gz` links, highest version wins). If `check_version_stale` ever reports nothing changed for a long time, suspect this path first — verify with:
+```bash
+cd /home/delfia-n-a-putri/Documents/Work/GEN_AI/Automation/rago-sync
+uv run python -c "from rago_sync.inspector.versions import get_latest_version; print(get_latest_version('gllm-inference'))"
+```
+It should print a real version, not `None`.
+
+### 6. VERSION_STALE fix must pin the exact latest version, not round down
+
+`update_version_constraint` used to set the floor to `_base_minor(latest)` (e.g. latest `0.6.90` → floor `0.6.0`). If the stale pinned version (e.g. `0.6.77`) already satisfied that same rounded-down floor, `uv lock` had nothing forcing it to re-resolve and silently kept the old version — the "fix" was a no-op. This is now fixed to pin `>=<exact latest>,<next-minor>`, which invalidates the old lock entry and forces `uv lock` to actually upgrade. When manually bumping a cookbook entry's version floor, always pin the exact version you verified works, not a rounded-down one.
+
+### 7. When a PR is specifically named (e.g. "sync cookbook for gl-sdk PR #5171"), skip `detect`
+
+If the user gives you a specific gl-sdk PR/feature and you have already (a) located the affected GitBook page/section, (b) updated and verified it (e.g. via the `gitbook-update` skill), and (c) confirmed the cookbook entry's runnability against the real merged code, you do not need to run `detect`/`status` first — go straight to editing the cookbook entry to match the new GitBook content and cookbook conventions, then verify + open a PR. `detect` is for discovering *what's* drifted across the whole cookbook; it's unnecessary overhead when the entry and the fix are already known.
+
+Two-way sync note: `gitbook-update` writes to a `docs/*` branch/PR against `docs/gitbook-sync` — the live GitBook page doesn't update until that PR is merged and published. `rago-sync sync --entry` compares against the *live* published GitBook page, so it won't see an unmerged docs PR's content. When acting on a not-yet-merged docs PR, edit the cookbook entry by hand to mirror that PR's diff (not via `rago-sync sync`), and verify runnability against the real released package version — do not assume the just-merged gl-sdk feature is already published; check `get_latest_version` and bump the entry's floor to the exact first version that has it (see gotcha 6).
+
+### 8. Token expiry mid-run
+
+A `gcloud` access token lasts ~1hr. Long `sync`/`sync-all`/`verify --all` runs over many entries can outlive it, causing spurious 401s partway through. This is now handled inside rago-sync (`refresh_token()` is called immediately before every `uv lock`/`uv sync`/`uv run` subprocess call, and the verifier retries once via `uv sync` on an `AUTH_ERROR` failure category). If you're driving `uv`/`curl` manually outside the CLI (e.g. probing package versions by hand), re-run `gcloud auth print-access-token` right before each call rather than reusing an old export, and remember raw `curl` needs `-L` — the internal registry 307-redirects tarball downloads.
+
 ## Cron
 
 `detect --email` runs automatically every Monday 9am (Hermes cron job: `rago-sync-weekly`).

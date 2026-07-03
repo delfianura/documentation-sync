@@ -23,17 +23,23 @@ The skills are thin bridges — all logic is in the Python CLI. Skills just map 
 Copy the skill directories into your Claude Code skills folder:
 
 ```bash
-# sync-cookbook (main skill — use this for day-to-day operations)
 cp -r skills/sync-cookbook ~/.claude/skills/
-
-# rag-o-doc-sync-orchestrator (full flow orchestrator)
+cp -r skills/gitbook-update ~/.claude/skills/
+cp -r skills/gitbook-check-for-update ~/.claude/skills/
 cp -r skills/rag-o-doc-sync-orchestrator ~/.claude/skills/
 ```
 
 Then verify Claude Code picks them up:
 
 ```bash
-claude /skills   # should list sync-cookbook and rag-o-doc-sync-orchestrator
+claude /skills   # should list all four skills above
+```
+
+Paths are environment-overridable (see `rago_sync/config.py`), so this works on any machine, not just the original author's:
+
+```bash
+export RAGO_SYNC_GL_SDK_REPO=/path/to/gl-sdk
+export RAGO_SYNC_COOKBOOK_REPO=/path/to/gen-ai-sdk-cookbook
 ```
 
 ---
@@ -63,13 +69,21 @@ verify all entries
 show status
 ```
 
-### `rag-o-doc-sync-orchestrator` — full flow
+### `gitbook-update` / `gitbook-check-for-update` — GitBook side only
 
-Use after receiving the weekly email report to orchestrate the full GitBook → Cookbook sync cycle.
+`gitbook-check-for-update` is read-only gap analysis (PR/branch/commit or full audit). `gitbook-update` does the actual edits: branches off `docs/gitbook-sync` in a worktree, edits `gitbook/**` only, and opens a PR back to `docs/gitbook-sync`.
+
+### `rag-o-doc-sync-orchestrator` — entry point, asks scope + mode
+
+Use this when you're not sure which of the above to run, or the request spans both GitBook and Cookbook. It asks two questions before doing anything:
+
+1. **Scope**: GitBook / Cookbook / **both** (default)
+2. **Mode**: routine drift check (discovery-first, via `detect`/`gitbook-check-for-update`) / **ad-hoc** update for a named PR (skips discovery, edits directly)
 
 ```
-/rag-o-doc-sync-orchestrator --mode=cookbook   # cookbook sync only
-/rag-o-doc-sync-orchestrator --mode=full        # gitbook update + cookbook sync
+"update docs and cookbook for gl-sdk PR #5171"   → scope=both, mode=ad-hoc (PR named)
+"what's out of sync with gitbook?"                → scope=gitbook, mode=routine (no PR named)
+"sync everything"                                 → scope=both, mode=routine
 ```
 
 ---
