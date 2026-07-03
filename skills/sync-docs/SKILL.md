@@ -1,22 +1,67 @@
 ---
-name: sync-cookbook
-description: RAGO Sync — detect and fix drift between gl-sdk main → Gitbook → cookbook. Backed by the rago-sync Python CLI at /home/delfia-n-a-putri/Documents/Work/GEN_AI/Automation/rago-sync. Use for any drift detection, sync, verify, or status check.
+name: sync-docs
+description: RAGO doc sync — GitBook and/or Cookbook, as a routine drift check or an ad-hoc PR-driven update. Entry point for "update the docs", "sync gitbook/cookbook for PR #X", "what's out of sync", or the weekly drift report follow-up. Backed by the rago-sync Python CLI plus the gitbook-update/gitbook-check-for-update skills.
 ---
 
-# sync-cookbook
+# sync-docs
 
-LLM bridge to the rago-sync CLI. All logic lives in Python — this skill just maps intent to the right command and runs it.
+Single entry point for keeping GitBook and the Cookbook in sync with gl-sdk. Delegates all actual logic elsewhere — this skill only decides **what** to run and **how**, then runs it.
 
-## How triggering works
+- GitBook edits/detection → `gitbook-update` / `gitbook-check-for-update` skills
+- Cookbook edits/detection → the rago-sync CLI (`uv run rago-sync <command>`) at `/home/delfia-n-a-putri/Documents/Work/GEN_AI/Automation/rago-sync`
 
-Previously this was a prompt-based skill (LLM did the steps). Now it is full Python code. The LLM's job is to:
-1. Interpret what the user wants
-2. Run the appropriate `uv run rago-sync <command>` call
-3. Show the output
+Do not reimplement GitBook-editing or cookbook-syncing logic here.
 
-The CLI is the source of truth. Do not reimplement any logic here.
+## Step 1 — Scope: GitBook, Cookbook, or both?
 
-## Trigger phrases → commands
+Ask unless the request already makes it obvious. **Default: both** — "sync the docs" / "update docs for PR #X" implies both sides unless the user names just one.
+
+| Scope | What runs |
+|---|---|
+| `gitbook` | `gitbook-update` (+ `gitbook-check-for-update` first, if in routine mode) |
+| `cookbook` | rago-sync CLI only |
+| `both` (default) | `gitbook-update` first, then the cookbook side, for the same change |
+
+## Step 2 — Mode: routine check, or ad-hoc for a named PR?
+
+| Mode | Trigger | What it means |
+|---|---|---|
+| **Routine check** | weekly cron report, "check for drift", no specific PR named | Discovery first: `gitbook-check-for-update` (full audit or named branch) + rago-sync `detect`/`status`, before touching any files |
+| **Ad-hoc update** | user names a specific PR/issue/feature ("update docs for gl-sdk PR #5171") | You already know the change and the affected page(s) — skip discovery, edit directly per the procedure below |
+
+Default to **ad-hoc** whenever a PR number, PR URL, branch name, or specific feature is named. Default to **routine check** for generic requests ("check gitbook", "what's out of sync", weekly report follow-up).
+
+## Routine-check procedure
+
+1. Run `gitbook-check-for-update` (full audit, or PR/branch mode if a branch was named) — read-only, produces a gap report.
+2. Run `uv run rago-sync detect` / `status` — read-only, produces cookbook drift state.
+3. Present both reports and ask which items to act on, then run the ad-hoc procedure below per item.
+
+## Ad-hoc procedure — GitBook side (scope = gitbook or both)
+
+1. **Identify the change.** `gh pr view <PR>` for the diff/summary. Search GitBook (`mcp__claude_ai_Gitbook__searchDocumentation`, then `getPage`) for the page(s) covering the changed component.
+2. **Set up an isolated worktree on `docs/gitbook-sync`** — never edit that branch directly:
+   ```bash
+   git -C <gl-sdk-repo> fetch origin docs/gitbook-sync main
+   git worktree add <worktree-path> origin/docs/gitbook-sync -b docs/<feature-branch-name>
+   ```
+3. **Edit only `gitbook/**`** in that worktree, following the `gitbook-update` skill's section-type rules (tutorials / how-to guides / resources).
+4. **Verify against the real merged code, not the doc's claims.** Install the library from that worktree's checked-out commit into a venv (`uv pip install -p <venv> -e <path-to-lib>`, with `UV_INDEX_GEN_AI_INTERNAL_USERNAME`/`PASSWORD` set from `gcloud auth print-access-token`) and actually run every code example. Fix the doc before proceeding if any example fails.
+5. **Commit only `gitbook/**`, push, open a draft PR against `docs/gitbook-sync`** (not `main`) via `gh pr create --base docs/gitbook-sync`.
+
+## Ad-hoc procedure — Cookbook side (scope = cookbook or both)
+
+1. **Locate the cookbook entry** for the affected page. If none exists, this is effectively `MISSING` — bootstrap via `uv run rago-sync sync --entry <path>` or by hand following the 7-file convention.
+2. **Two-way sync gotcha:** if the GitBook docs PR above isn't merged yet, the *live* GitBook page hasn't changed — `rago-sync sync --entry` compares against the live page and won't see it. Edit the cookbook script by hand to mirror the unmerged docs PR's diff instead.
+3. **Verify against the real *published* package version**, not source — cookbook entries install from the internal package index, and a feature just merged to `main` is not necessarily released yet:
+   ```bash
+   cd /home/delfia-n-a-putri/Documents/Work/GEN_AI/Automation/rago-sync
+   uv run python -c "from rago_sync.inspector.versions import get_latest_version; print(get_latest_version('<package>'))"
+   ```
+   If the pinned floor predates the feature, find the first published version that has it and pin the entry's `pyproject.toml` to exactly that version (not a rounded-down `X.Y.0` — see gotcha 6 below). Re-run `uv lock && uv run <script>.py` and confirm output matches the README.
+4. **Commit, push, open a PR** against the cookbook repo's `main` (a separate PR from the GitBook one — different repos).
+
+## Trigger phrases → rago-sync commands (cookbook-only shortcuts)
 
 | What you say | Command to run |
 |---|---|
@@ -29,19 +74,24 @@ The CLI is the source of truth. Do not reimplement any logic here.
 | "verify all entries" | `verify --all` |
 | "show status", "what's drifted" | `status` |
 
-## Execution
-
 Every command runs from the rago-sync project root:
-
 ```bash
 cd /home/delfia-n-a-putri/Documents/Work/GEN_AI/Automation/rago-sync
 uv run rago-sync <command> [options]
 ```
 
+## Configuration
+
+Paths are environment-overridable (`rago_sync/config.py`) — reproducible on any machine, not just the original author's:
+```bash
+export RAGO_SYNC_GL_SDK_REPO=/path/to/gl-sdk
+export RAGO_SYNC_COOKBOOK_REPO=/path/to/gen-ai-sdk-cookbook
+```
+
 ## Auth
 
 - `detect` and `status` — no auth needed (read-only)
-- `sync`, `sync-all`, `verify` — require gcloud auth; the CLI handles `refresh_token()` automatically
+- `sync`, `sync-all`, `verify` — require gcloud auth; the CLI refreshes the token before every `uv lock`/`uv sync`/`uv run` call automatically
 
 ## Output files
 
@@ -119,15 +169,21 @@ It should print a real version, not `None`.
 
 `update_version_constraint` used to set the floor to `_base_minor(latest)` (e.g. latest `0.6.90` → floor `0.6.0`). If the stale pinned version (e.g. `0.6.77`) already satisfied that same rounded-down floor, `uv lock` had nothing forcing it to re-resolve and silently kept the old version — the "fix" was a no-op. This is now fixed to pin `>=<exact latest>,<next-minor>`, which invalidates the old lock entry and forces `uv lock` to actually upgrade. When manually bumping a cookbook entry's version floor, always pin the exact version you verified works, not a rounded-down one.
 
-### 7. When a PR is specifically named (e.g. "sync cookbook for gl-sdk PR #5171"), skip `detect`
+### 7. When a PR is specifically named, this is ad-hoc mode — skip `detect`
 
-If the user gives you a specific gl-sdk PR/feature and you have already (a) located the affected GitBook page/section, (b) updated and verified it (e.g. via the `gitbook-update` skill), and (c) confirmed the cookbook entry's runnability against the real merged code, you do not need to run `detect`/`status` first — go straight to editing the cookbook entry to match the new GitBook content and cookbook conventions, then verify + open a PR. `detect` is for discovering *what's* drifted across the whole cookbook; it's unnecessary overhead when the entry and the fix are already known.
-
-Two-way sync note: `gitbook-update` writes to a `docs/*` branch/PR against `docs/gitbook-sync` — the live GitBook page doesn't update until that PR is merged and published. `rago-sync sync --entry` compares against the *live* published GitBook page, so it won't see an unmerged docs PR's content. When acting on a not-yet-merged docs PR, edit the cookbook entry by hand to mirror that PR's diff (not via `rago-sync sync`), and verify runnability against the real released package version — do not assume the just-merged gl-sdk feature is already published; check `get_latest_version` and bump the entry's floor to the exact first version that has it (see gotcha 6).
+See Step 2 above. `detect` is for discovering *what's* drifted across the whole cookbook; it's unnecessary overhead when the entry and the fix are already known.
 
 ### 8. Token expiry mid-run
 
 A `gcloud` access token lasts ~1hr. Long `sync`/`sync-all`/`verify --all` runs over many entries can outlive it, causing spurious 401s partway through. This is now handled inside rago-sync (`refresh_token()` is called immediately before every `uv lock`/`uv sync`/`uv run` subprocess call, and the verifier retries once via `uv sync` on an `AUTH_ERROR` failure category). If you're driving `uv`/`curl` manually outside the CLI (e.g. probing package versions by hand), re-run `gcloud auth print-access-token` right before each call rather than reusing an old export, and remember raw `curl` needs `-L` — the internal registry 307-redirects tarball downloads.
+
+## Human Gates
+
+| Gate | Decision | Who |
+|---|---|---|
+| GitBook PR review | Approve/Request changes | You / assigned author |
+| Cookbook PR review | Approve/Request changes | You / assigned author |
+| Version bump breaking-change check | Fix/skip entry | You (rago-sync auto-opens an issue if `classify_version_bump` flags it breaking) |
 
 ## Cron
 
@@ -137,11 +193,14 @@ A `gcloud` access token lasts ~1hr. Long `sync`/`sync-all`/`verify --all` runs o
 ## Example session
 
 ```
-You: run detect
-→ uv run rago-sync detect
+You: what's out of sync with gitbook?
+→ scope=gitbook, mode=routine → gitbook-check-for-update (full audit)
 
-You: what's drifted?
-→ uv run rago-sync status
+You: update docs and cookbook for gl-sdk PR #5171
+→ scope=both, mode=ad-hoc → gitbook-update, then cookbook procedure above
+
+You: sync everything
+→ scope=both, mode=routine → gitbook-check-for-update + uv run rago-sync detect
 
 You: sync tutorials/inference/lm_invoker
 → uv run rago-sync sync --entry tutorials/inference/lm_invoker
