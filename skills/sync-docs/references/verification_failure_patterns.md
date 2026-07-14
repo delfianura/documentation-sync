@@ -228,6 +228,38 @@ These entries passed verification consistently:
 
 ---
 
+### 7. Copied-verbatim GitBook pseudocode → NameError at runtime — found via PR #78 review
+
+**Error Pattern:** GitBook illustrative snippets sometimes reference a variable (`vector_datastore`, `data_store`, `document_store`, `chunk_store`) that the page never defines — it's showing "assume you already have a store" pseudocode. `sync` copies the code block verbatim, so the cookbook script inherits the undefined name and raises `NameError` the moment it runs.
+
+**Root Cause:** Verification classified these as `❌ Pseudocode` internally, but nothing blocked the PR from being opened with those entries included — the internal "Notes" column admitted the failure instead of gating on it.
+
+**Fix / Gate:** Treat "fails with NameError due to undefined variable" as a hard verification failure, distinct from `NOT_RUNNABLE` (missing credentials, which is expected per pattern #4 above). Do not open a PR containing an entry that hits this — either construct a concrete stub (e.g. in-memory `ChromaDataStore`) so the script actually runs, or exclude the entry from the PR and file a follow-up issue instead of shipping it with a known-broken note.
+
+---
+
+### 8. Import path drift on sync — found via PR #78 review
+
+**Error Pattern:** A reviewer suggested `from gllm_inference.em_invoker import OpenAIEMInvoker` in place of what the sync produced — the generated import didn't match the submodule convention already used by sibling entries.
+
+**Fix:** Before committing a synced/hand-edited entry, grep sibling entries in the same category for the accepted import form of the same class and match it, rather than trusting whatever GitBook's snippet or the sync script produced verbatim.
+
+---
+
+### 9. Removing `load_dotenv()`/env loading without checking dependents — found via PR #78 review
+
+**Error Pattern:** `reranker.py` had `load_dotenv()` removed during the docstring/cleanup pass, but the entry still uses `OpenAIEMInvoker` (needs `OPENAI_API_KEY`) and `pyproject.toml` still declares `python-dotenv`. Result: local `.env`-based dev breaks silently. Separately, `filter_extractor.py` (a new entry) never had `load_dotenv()`/`python-dotenv` added at all despite needing an API key.
+
+**Fix:** Whenever an entry uses any LLM/EM invoker requiring an API key, verify as a pair: (a) `load_dotenv()` is called, and (b) `python-dotenv` is declared in that entry's `pyproject.toml`. Don't drop one side during unrelated edits (docstring passes, version bumps) without checking the other.
+
+---
+
+### 10. Undocumented "should we call `release_resources()`?" pattern
+
+A reviewer asked whether invokers should always have `release_resources()` called after use — there's currently no documented answer either way in this skill. Before the next sync touching invoker-using entries, check the convention actually used across the cookbook (grep for `release_resources` usage) and either apply it consistently or record here why it's not needed, so this doesn't get asked PR after PR.
+
+---
+
 ## Known Outdated GitBook Pages (Need Sync)
 
 As of 2026-06-12, these GitBook pages have cookbook entries that may be outdated:

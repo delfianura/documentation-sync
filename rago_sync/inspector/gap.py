@@ -1,5 +1,11 @@
+import re
 import subprocess
+from pathlib import Path
 from ..config import GL_SDK_REPO, COOKBOOK_REPO, GITBOOK_BRANCH, SKIP_PATTERNS
+
+
+def _slug(s: str) -> str:
+    return s.lower().replace("-", "_").replace(" ", "_")
 
 
 def list_gitbook_pages() -> list[str]:
@@ -49,11 +55,46 @@ def list_cookbook_entries() -> list[str]:
 def gitbook_to_cookbook_path(gitbook_rel: str) -> str:
     """Map gitbook relative path to cookbook entry path.
 
-    tutorials/inference/lm-invoker/README.md  ->  tutorials/inference/lm_invoker
-    guides/build-end-to-end-rag-pipeline/...  ->  how-to-guides/build_end_to_end_rag_pipeline/...
+    Simple fallback: replace hyphens, guides/ → how-to-guides/.
+    Does NOT handle numeric prefixes — use find_best_cookbook_match() for that.
     """
     path = gitbook_rel.replace("-", "_")
     path = path.removesuffix(".md").removesuffix("/README")
     if path.startswith("guides/"):
         path = "how-to-guides/" + path[len("guides/"):]
     return path
+
+
+def find_best_cookbook_match(gitbook_rel: str, cookbook_entries: set[str]) -> str | None:
+    """Robustly match a GitBook page to its cookbook entry.
+
+    Handles:
+    - Numeric prefixes in cookbook paths (001_your_first_rag_pipeline)
+    - guides/ → how-to-guides/ section mapping
+    - Hyphen-to-underscore normalization
+    - Subdirectory equivalence checks
+
+    Returns the exact cookbook entry path, or None if no match found.
+    """
+    gb = gitbook_rel.removesuffix(".md").removesuffix("/README")
+    gb_section = gb.split("/")[0]
+    target_section = "how-to-guides" if gb_section == "guides" else "tutorials"
+
+    gb_parts = gb.split("/")
+    gb_last = _slug(gb_parts[-1])
+    gb_subdir = "/".join(gb_parts[1:-1]) if len(gb_parts) > 2 else ""
+
+    best: str | None = None
+    for cb in cookbook_entries:
+        cb_parts = cb.split("/")
+        if cb_parts[0] != target_section:
+            continue
+        cb_last_clean = re.sub(r"^\d+_", "", cb_parts[-1])
+        if _slug(cb_last_clean) != gb_last:
+            continue
+        cb_subdir = "/".join(cb_parts[1:-1]) if len(cb_parts) > 2 else ""
+        if _slug(gb_subdir) == _slug(cb_subdir):
+            best = cb
+            break
+
+    return best

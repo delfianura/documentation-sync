@@ -59,7 +59,8 @@ Default to **ad-hoc** whenever a PR number, PR URL, branch name, or specific fea
    uv run python -c "from rago_sync.inspector.versions import get_latest_version; print(get_latest_version('<package>'))"
    ```
    If the pinned floor predates the feature, find the first published version that has it and pin the entry's `pyproject.toml` to exactly that version (not a rounded-down `X.Y.0` — see gotcha 6 below). Re-run `uv lock && uv run <script>.py` and confirm output matches the README.
-4. **Commit, push, open a PR** against the cookbook repo's `main` (a separate PR from the GitBook one — different repos).
+4. **Gate before opening the PR:** if verification found an entry fails for any reason other than missing credentials/infra (`NOT_RUNNABLE` per gotcha #4) — e.g. `NameError` from an undefined variable copied verbatim from GitBook pseudocode — fix it or drop it from this PR. Do not ship an entry with a "Notes" column admitting it's broken; that's not a status report, it's an unfixed bug. See `references/verification_failure_patterns.md` #7–9 (found via PR #78 review: three entries were opened as known-broken pseudocode, plus an import-path mismatch and a dropped `load_dotenv()`/`python-dotenv` pairing slipped through).
+5. **Commit, push, open a PR** against the cookbook repo's `main` (a separate PR from the GitBook one — different repos).
 
 ## Trigger phrases → rago-sync commands (cookbook-only shortcuts)
 
@@ -176,6 +177,10 @@ See Step 2 above. `detect` is for discovering *what's* drifted across the whole 
 ### 8. Token expiry mid-run
 
 A `gcloud` access token lasts ~1hr. Long `sync`/`sync-all`/`verify --all` runs over many entries can outlive it, causing spurious 401s partway through. This is now handled inside rago-sync (`refresh_token()` is called immediately before every `uv lock`/`uv sync`/`uv run` subprocess call, and the verifier retries once via `uv sync` on an `AUTH_ERROR` failure category). If you're driving `uv`/`curl` manually outside the CLI (e.g. probing package versions by hand), re-run `gcloud auth print-access-token` right before each call rather than reusing an old export, and remember raw `curl` needs `-L` — the internal registry 307-redirects tarball downloads.
+
+### 9. `NOT_RUNNABLE` due to missing infra/credentials vs. actually broken — don't conflate them
+
+Gotcha #4 says missing-credential `NOT_RUNNABLE` is expected and fine to ship. That is NOT the same as a `NameError` from a variable GitBook's snippet never defined (pseudocode copied verbatim), a wrong import path, or a dropped `load_dotenv()`/`python-dotenv` pairing — those are real bugs that must be fixed or the entry dropped before the PR is opened, not noted and shipped anyway. See gate in the ad-hoc Cookbook procedure step 4 and `references/verification_failure_patterns.md` #7–10. (Found via gen-ai-sdk-cookbook PR #78 review — three entries were opened as known-broken, plus an import mismatch and inconsistent env-loading slipped past.)
 
 ## Human Gates
 

@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 
 from ..state import EntryState, EntryStatus, StateManager
 from ..config import PENDING_REVIEW_STALE_DAYS, AUTH_REFRESH_EVERY_N
-from .gap import list_gitbook_pages, list_cookbook_entries, gitbook_to_cookbook_path, get_page_content, has_gllm_imports
+from .gap import list_gitbook_pages, list_cookbook_entries, gitbook_to_cookbook_path, find_best_cookbook_match, get_page_content, has_gllm_imports
 from .template import check_template
 from .drift import check_content_drift
 from .api_drift import check_api_drift
@@ -65,7 +65,13 @@ def run_detect(state_manager: StateManager) -> dict[str, EntryStatus]:
         content = get_page_content(gb_rel)
         if not has_gllm_imports(content):
             continue
-        cookbook_path = gitbook_to_cookbook_path(gb_rel)
+
+        # Use robust matching first, fall back to simple guess
+        cookbook_path = find_best_cookbook_match(gb_rel, cb_entries)
+        if cookbook_path is None:
+            # Fallback guess for status.json source tracking
+            cookbook_path = gitbook_to_cookbook_path(gb_rel)
+
         if cookbook_path in results:
             continue  # already handled (PENDING_REVIEW)
 

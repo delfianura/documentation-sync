@@ -23,6 +23,8 @@ def _parse_failure_category(output: str) -> str:
         return "AUTH_ERROR"
     if "TypeError" in output and "argument" in output:
         return "SIGNATURE_ERROR"
+    if "Unclosed client session" in output or "Unclosed connector" in output:
+        return "RESOURCE_LEAK"
     return "UNKNOWN"
 
 
@@ -39,6 +41,9 @@ def _run_script(script: Path, cwd: Path) -> tuple[bool, str]:
         cwd=cwd, capture_output=True, text=True, timeout=120,
     )
     output = result.stdout + result.stderr
+    # Resource leaks: Python doesn't set non-zero exit code for unclosed clients
+    if result.returncode == 0 and ("Unclosed client session" in output or "Unclosed connector" in output):
+        return False, output
     return result.returncode == 0, output
 
 
