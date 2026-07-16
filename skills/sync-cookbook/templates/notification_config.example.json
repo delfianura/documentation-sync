@@ -1,0 +1,12 @@
+{
+  "email": {
+    "sender": "your-email@gmail.com",
+    "recipients": ["recipient@example.com"],
+    "app_password": "<gmail-app-password>"
+  },
+  "telegram": {
+    "bot_token": "<telegram-bot-token>",
+    "chat_id": "<telegram-chat-id>"
+  },
+  "telegram_config_path": "~/.config/telegram/config.json"
+}

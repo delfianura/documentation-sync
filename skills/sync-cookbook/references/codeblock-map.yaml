@@ -1,0 +1,137 @@
+https://gdplabs.gitbook.io/sdk/gen-ai-sdk/tutorials/core/component:
+  entry_dir: tutorials/core/component
+  blocks:
+  - heading: 'Quickstart: Define Your First Component'
+    gitbook_anchor: '#quickstart'
+    cookbook_file: quickstart.py
+    runnable: true
+    notes: TextFormatter with @main + execute + input schema (3 blocks merged)
+  - heading: Using @main with Abstract Classes
+    gitbook_anchor: '#using-main-with-abstract-classes'
+    cookbook_file: abstract_component.py
+    runnable: true
+    notes: BaseProcessor ABC + UpperCase/LowerCase + shared schema assertion
+  - heading: 'Example: Overriding @main in Subclasses'
+    gitbook_anchor: '#example-overriding-main-in-subclasses'
+    cookbook_file: override_main.py
+    runnable: true
+    notes: AdvancedProcessor + execution + input_params + log level
+  - heading: Backwards Compatibility with Legacy _run Components
+    gitbook_anchor: '#backwards-compatibility-with-legacy-run-components'
+    cookbook_file: legacy_component.py
+    runnable: true
+    notes: ''
+https://gdplabs.gitbook.io/sdk/how-to-guides/add-a-custom-component:
+  entry_dir: tutorials/core/component
+  blocks:
+  - heading: Custom Component with _run
+    gitbook_anchor: ''
+    cookbook_file: custom_component.py
+    runnable: true
+    notes: How-to-guide entry using Echo/_run pattern. Not from a tutorial page.
+https://gdplabs.gitbook.io/sdk/gen-ai-sdk/tutorials/core/dynamic-component:
+  entry_dir: tutorials/core/dynamic_component
+  blocks:
+  - heading: Quickstart
+    gitbook_anchor: '#quickstart'
+    cookbook_file: dynamic_component.py
+    runnable: true
+    notes: DynamicComponent with Lazy.from_runtime
+  - heading: Using Component.to_dynamic()
+    gitbook_anchor: '#using-componentto_dynamic'
+    cookbook_file: to_dynamic.py
+    runnable: true
+    notes: ''
+  - heading: Instance Caching
+    gitbook_anchor: '#instance-caching'
+    cookbook_file: instance_caching.py
+    runnable: true
+    notes: cache_instances=True + cache_size
+https://gdplabs.gitbook.io/sdk/gen-ai-sdk/tutorials/core/event-emitter:
+  entry_dir: tutorials/core/event_emitter
+  blocks:
+  - heading: Quickstart
+    gitbook_anchor: '#quickstart'
+    cookbook_file: event_emitter.py
+    runnable: true
+    notes: EventEmitter.with_console_handler + emit events
+https://gdplabs.gitbook.io/sdk/gen-ai-sdk/tutorials/core/logger-manager:
+  entry_dir: tutorials/core/logger_manager
+  blocks:
+  - heading: Quickstart
+    gitbook_anchor: '#quickstart'
+    cookbook_file: logger_manager.py
+    runnable: true
+    notes: Basic LoggerManager usage
+  - heading: Getting Loggers
+    gitbook_anchor: '#getting-loggers'
+    cookbook_file: getting_loggers.py
+    runnable: true
+    notes: Root vs child logger
+  - heading: Configuring Levels and Formats
+    gitbook_anchor: '#configuring-levels-and-formats'
+    cookbook_file: configuring_levels.py
+    runnable: true
+    notes: set_level + set_log_format + set_date_format (3 sub-blocks merged)
+  - heading: Adding Custom Handlers
+    gitbook_anchor: '#adding-custom-handlers'
+    cookbook_file: adding_handlers.py
+    runnable: true
+    notes: FileHandler via add_handler
+  - heading: JSON Error Payloads
+    gitbook_anchor: '#json-error-payloads'
+    cookbook_file: json_error_payloads.py
+    runnable: true
+    notes: JSON mode error logging with exc_info + extra
+https://gdplabs.gitbook.io/sdk/gen-ai-sdk/tutorials/core/retry:
+  entry_dir: tutorials/core/retry
+  blocks:
+  - heading: Quickstart
+    gitbook_anchor: '#quickstart'
+    cookbook_file: retry_quickstart.py
+    runnable: true
+    notes: Decorator + direct execution (2 blocks merged)
+  - heading: RetryConfig
+    gitbook_anchor: '#retryconfig'
+    cookbook_file: retry_config.py
+    runnable: true
+    notes: Full RetryConfig parameters
+  - heading: Decorator Usage
+    gitbook_anchor: '#decorator-usage'
+    cookbook_file: decorator_usage.py
+    runnable: true
+    notes: Async, sync, class method decorator examples (multiple sub-blocks merged)
+  - heading: Exponential Backoff and Jitter
+    gitbook_anchor: '#exponential-backoff-and-jitter'
+    cookbook_file: backoff_and_jitter.py
+    runnable: true
+    notes: No-jitter vs with-jitter config comparison
+  - heading: Timeout
+    gitbook_anchor: '#timeout'
+    cookbook_file: timeout_usage.py
+    runnable: true
+    notes: Overall timeout with asyncio.TimeoutError
+  - heading: Exception Handling
+    gitbook_anchor: '#exception-handling'
+    cookbook_file: exception_handling.py
+    runnable: true
+    notes: retry_on_exceptions + non_retryable_exceptions (2 config blocks merged)
+https://gdplabs.gitbook.io/sdk/gen-ai-sdk/tutorials/core/tool:
+  entry_dir: tutorials/core/tool
+  blocks:
+  - heading: Quickstart
+    gitbook_anchor: '#quickstart'
+    cookbook_file: tool_quickstart.py
+    runnable: true
+    notes: fetch_weather + add tool (quickstart + schemata blocks merged)
+  - heading: The @tool Decorator
+    gitbook_anchor: '#the-tool-decorator'
+    cookbook_file: tool_decorator_options.py
+    runnable: true
+    notes: name, title, description resolution
+  - heading: Calling a Tool
+    gitbook_anchor: '#calling-a-tool'
+    cookbook_file: calling_a_tool.py
+    runnable: true
+    notes: Direct call vs invoke() + input/output schema
+
