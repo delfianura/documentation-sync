@@ -24,11 +24,11 @@ from dataclasses import dataclass, asdict, field
 # CONFIGURATION
 # ============================================================================
 
-COOKBOOK_REPO_PATH = Path("/home/delfia-n-a-putri/gen-ai-sdk-cookbook")
-REPORT_OUTPUT_PATH = Path("/home/delfia-n-a-putri/cookbook_sync_report.json")
-HTML_REPORT_PATH = Path("/home/delfia-n-a-putri/cookbook_sync_report.html")
+COOKBOOK_REPO_PATH = Path("$COOKBOOK_DIR")
+REPORT_OUTPUT_PATH = Path("./cookbook_sync_report.json")
+HTML_REPORT_PATH = Path("./cookbook_sync_report.html")
 
-EMAIL_CONFIG_PATH = Path("/home/delfia-n-a-putri/.config/opencode/skills/send-simplification-report (2)/scripts/config.json")
+EMAIL_CONFIG_PATH = Path("$EMAIL_CONFIG_PATH")
 
 # GitBook pages with runnable Python examples (discovered via MCP)
 GITBOOK_PAGES: Dict[str, Dict[str, Any]] = {

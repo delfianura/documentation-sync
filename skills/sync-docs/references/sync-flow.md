@@ -58,7 +58,7 @@ Documents the end-to-end flow from weekly detection through GitBook update to Co
 
 ## GitBook Update Workflow (gitbook-update)
 
-Located at `/home/delfia-n-a-putri/Documents/Work/GEN_AI/dev2/.ai/workflows/gitbook-update.md`
+Located at `$GL_SDK_DEV_DIR/.ai/workflows/gitbook-update.md`
 
 **Section-type routing:**
 - Tutorials → `.ai/rules/gitbook-update-tutorials.md`
@@ -107,8 +107,8 @@ gen-ai/<category>/<subcategory>/<entry_name>/
 ## Repository Paths
 
 ```bash
-GL_SDK_REPO=/home/delfia-n-a-putri/Documents/Work/GEN_AI/gl-sdk
-COOKBOOK_REPO=/home/delfia-n-a-putri/Documents/Work/GEN_AI/gen-ai-sdk-cookbook
+GL_SDK_REPO=$GL_SDK_REPO
+COOKBOOK_REPO=$COOKBOOK_DIR
 GITBOOK_BRANCH=origin/docs/gitbook-sync
 ```
 

@@ -1,11 +1,23 @@
 ---
 name: sync-cookbook
-description: RAGO Sync — detect and fix drift between gl-sdk main → Gitbook → cookbook. Backed by the rago-sync Python CLI at /home/delfia-n-a-putri/Documents/Work/GEN_AI/Automation/rago-sync. Use for any drift detection, sync, verify, or status check.
+description: RAGO Sync — detect and fix drift between gl-sdk main → Gitbook → cookbook. Backed by the rago-sync Python CLI. Use for any drift detection, sync, verify, or status check.
 ---
 
 # sync-cookbook
 
 LLM bridge to the rago-sync CLI. All logic lives in Python — this skill maps intent to the right command and ensures cookbook code conventions are followed.
+
+## Environment
+
+This skill uses three env vars instead of hardcoded paths:
+
+| Variable | Meaning | Typical value |
+|---|---|---|
+| `\` | rago-sync repo root (CLI source + CSV mapping) | `~/Documents/Work/GEN_AI/Automation/rago-sync` |
+| `\` | gen-ai-sdk-cookbook checkout root | `~/Documents/Work/GEN_AI/gen-ai-sdk-cookbook` |
+| `\` | Parent dir for sync worktrees | `~/Documents/Work/GEN_AI/worktrees` |
+
+Set them before running commands from this skill.
 
 ## When to sync (trigger taxonomy)
 
@@ -32,7 +44,7 @@ Sync is **not** a single monolithic operation. There are three distinct scenario
 1. Run `uv run rago-sync detect` to find `CONTENT_DRIFT` entries.
 2. For each drifted entry, inspect the current cookbook script vs the GitBook source:
    ```bash
-   cat /home/delfia-n-a-putri/Documents/Work/GEN_AI/gen-ai-sdk-cookbook/gen-ai/<entry_path>/*.py
+   cat $COOKBOOK_DIR/gen-ai/<entry_path>/*.py
    ```
 3. Run `uv run rago-sync sync --entry <path>` to overwrite from GitBook.
 4. Re-add `release_resources()`, `load_dotenv()`, and self-contained setup (GitBook snippets are fragments — see "GitBook fragments" below).
@@ -138,7 +150,7 @@ Run the main page against `.ai/rules/gitbook-update-tutorials.md`. The data-stor
 All commands run from the rago-sync project root:
 
 ```bash
-cd /home/delfia-n-a-putri/Documents/Work/GEN_AI/Automation/rago-sync
+cd $RAGO_SYNC_DIR
 uv run rago-sync <command> [options]
 ```
 
@@ -149,7 +161,7 @@ uv run rago-sync <command> [options]
 - PR #75 created `lm_invoker_basic_usage/` (prefixed folder) instead of `basic_usage/` (GitBook section heading). This required PR #88 to delete 11 prefixed duplicates and rename them.
 - Convention-based mapping can't handle pages where the GitBook heading doesn't match the folder slug.
 
-**A CSV mapping file exists** at `/home/delfia-n-a-putri/Documents/Work/GEN_AI/Automation/rago-sync/gitbook-to-cookbook-mapping.csv` (generated Jul 7, updated Jul 16). It has columns: `Type,GitBook Path,Cookbook Path,Status`. This is a snapshot, not a live lookup — but it MUST be kept in sync after structural changes.
+**A CSV mapping file exists** at `$RAGO_SYNC_DIR/gitbook-to-cookbook-mapping.csv` (generated Jul 7, updated Jul 16). It has columns: `Type,GitBook Path,Cookbook Path,Status`. This is a snapshot, not a live lookup — but it MUST be kept in sync after structural changes.
 
 **After any structural sync** (merging/restructuring cookbook directories), update the CSV to match the new layout — remove old entries that were deleted/merged, add new `SYNCED` entries for the new directories, and mark resource pages as `skip`. A stale CSV causes phantom `MISSING` results in future `detect` runs. New statuses: `SYNCED` (entry verified and up-to-date), `RESOURCE_PAGE` (not a tutorial, skip), `BLOCKED_ON_INFRA` (entry needs external infra to verify).
 
@@ -174,14 +186,14 @@ uv run rago-sync <command> [options]
 
 1. Check sparse checkout — if `gen-ai/tutorials/` isn't checked out, everything shows as MISSING:
    ```bash
-   git -C /home/delfia-n-a-putri/Documents/Work/GEN_AI/gen-ai-sdk-cookbook sparse-checkout list
+   git -C $COOKBOOK_DIR sparse-checkout list
    # If missing:
-   git -C /home/delfia-n-a-putri/Documents/Work/GEN_AI/gen-ai-sdk-cookbook sparse-checkout add gen-ai/tutorials/retrieval
-   git -C /home/delfia-n-a-putri/Documents/Work/GEN_AI/gen-ai-sdk-cookbook checkout
+   git -C $COOKBOOK_DIR sparse-checkout add gen-ai/tutorials/retrieval
+   git -C $COOKBOOK_DIR checkout
    ```
 2. Verify branch is `main` (or the PR branch you're working on):
    ```bash
-   git -C /home/delfia-n-a-putri/Documents/Work/GEN_AI/gen-ai-sdk-cookbook branch --show-current
+   git -C $COOKBOOK_DIR branch --show-current
    ```
 
 ### B. After `sync --entry` (before committing)
@@ -229,8 +241,8 @@ This is the primary method for manual sync when the CLI is unavailable. Always c
 
 Always create a git worktree for sync edits — never work directly on `main`:
 ```bash
-cd /home/delfia-n-a-putri/Documents/Work/GEN_AI/gen-ai-sdk-cookbook
-git worktree add /home/delfia-n-a-putri/Documents/Work/GEN_AI/worktrees/sync-<scope> -b feat/sync-<scope>-tutorials main
+cd $COOKBOOK_DIR
+git worktree add $WORKTREE_DIR/sync-<scope> -b feat/sync-<scope>-tutorials main
 ```
 Set sparse checkout to include the tutorial directories you need:
 ```bash
@@ -484,5 +496,5 @@ Before writing any "X no longer exists" or "X changed to Y" claim in a PR body, 
 
 ## Source
 
-CLI source: `/home/delfia-n-a-putri/Documents/Work/GEN_AI/Automation/rago-sync`
+CLI source: `$RAGO_SYNC_DIR`
 GitHub: https://github.com/delfianura/documentation-sync

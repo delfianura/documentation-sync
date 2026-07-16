@@ -109,7 +109,7 @@ The weekly detect + email runs automatically via Hermes cron — no LLM involved
 
 ```bash
 # Hermes cron job: rago-sync-weekly (Monday 9am)
-cd /home/delfia-n-a-putri/Documents/Work/GEN_AI/Automation/rago-sync
+cd $RAGO_SYNC_DIR
 uv run rago-sync detect --email
 ```
 

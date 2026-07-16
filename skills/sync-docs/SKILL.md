@@ -8,7 +8,7 @@ description: RAGO doc sync — GitBook and/or Cookbook, as a routine drift check
 Single entry point for keeping GitBook and the Cookbook in sync with gl-sdk. Delegates all actual logic elsewhere — this skill only decides **what** to run and **how**, then runs it.
 
 - GitBook edits/detection → `gitbook-update` / `gitbook-check-for-update` skills
-- Cookbook edits/detection → the rago-sync CLI (`uv run rago-sync <command>`) at `/home/delfia-n-a-putri/Documents/Work/GEN_AI/Automation/rago-sync`
+- Cookbook edits/detection → the rago-sync CLI (`uv run rago-sync <command>`) at `$RAGO_SYNC_DIR`
 
 Do not reimplement GitBook-editing or cookbook-syncing logic here.
 
@@ -55,7 +55,7 @@ Default to **ad-hoc** whenever a PR number, PR URL, branch name, or specific fea
 2. **Two-way sync gotcha:** if the GitBook docs PR above isn't merged yet, the *live* GitBook page hasn't changed — `rago-sync sync --entry` compares against the live page and won't see it. Edit the cookbook script by hand to mirror the unmerged docs PR's diff instead.
 3. **Verify against the real *published* package version**, not source — cookbook entries install from the internal package index, and a feature just merged to `main` is not necessarily released yet:
    ```bash
-   cd /home/delfia-n-a-putri/Documents/Work/GEN_AI/Automation/rago-sync
+   cd $RAGO_SYNC_DIR
    uv run python -c "from rago_sync.inspector.versions import get_latest_version; print(get_latest_version('<package>'))"
    ```
    If the pinned floor predates the feature, find the first published version that has it and pin the entry's `pyproject.toml` to exactly that version (not a rounded-down `X.Y.0` — see gotcha 6 below). Re-run `uv lock && uv run <script>.py` and confirm output matches the README.
@@ -151,7 +151,7 @@ python3 scripts/verify_coverage.py --cookbook-root /any/cookbook --map /path/to/
 
 Every command runs from the rago-sync project root:
 ```bash
-cd /home/delfia-n-a-putri/Documents/Work/GEN_AI/Automation/rago-sync
+cd $RAGO_SYNC_DIR
 uv run rago-sync <command> [options]
 ```
 
@@ -196,18 +196,18 @@ The cookbook repo may use sparse checkout. If `gen-ai/tutorials/` is not checked
 
 Before running detect, check:
 ```bash
-git -C /home/delfia-n-a-putri/Documents/Work/GEN_AI/gen-ai-sdk-cookbook sparse-checkout list
+git -C $COOKBOOK_DIR sparse-checkout list
 ```
 
 If the section you care about is missing, add it:
 ```bash
-git -C /home/delfia-n-a-putri/Documents/Work/GEN_AI/gen-ai-sdk-cookbook sparse-checkout add gen-ai/tutorials/inference
-git -C /home/delfia-n-a-putri/Documents/Work/GEN_AI/gen-ai-sdk-cookbook checkout
+git -C $COOKBOOK_DIR sparse-checkout add gen-ai/tutorials/inference
+git -C $COOKBOOK_DIR checkout
 ```
 
 Also verify the branch:
 ```bash
-git -C /home/delfia-n-a-putri/Documents/Work/GEN_AI/gen-ai-sdk-cookbook branch --show-current
+git -C $COOKBOOK_DIR branch --show-current
 ```
 
 If it is not `main`, switch first: `git -C ... checkout main`
@@ -218,7 +218,7 @@ If it is not `main`, switch first: `git -C ... checkout main`
 
 Before syncing CONTENT_DRIFT entries, inspect what will be overwritten:
 ```bash
-cat /home/delfia-n-a-putri/Documents/Work/GEN_AI/gen-ai-sdk-cookbook/gen-ai/<entry_path>/*.py
+cat $COOKBOOK_DIR/gen-ai/<entry_path>/*.py
 ```
 
 If the file has intentional local additions, do not run `sync` on that entry. Restore manually after if needed.
@@ -235,7 +235,7 @@ Entries that require Google service account credentials will always be `NOT_RUNN
 
 `get_latest_version()` used to shell out to `uv pip index versions <pkg>`. That subcommand was removed and now errors with `unrecognized subcommand 'index'`, so on older builds of rago-sync `VERSION_STALE` was **never detected** — the function silently returned `None` for every package. This has been fixed in rago-sync to query the PEP 503 simple index directly (`GET <registry>/<package>/`, parsed for `pkg-X.Y.Z.tar.gz` links, highest version wins). If `check_version_stale` ever reports nothing changed for a long time, suspect this path first — verify with:
 ```bash
-cd /home/delfia-n-a-putri/Documents/Work/GEN_AI/Automation/rago-sync
+cd $RAGO_SYNC_DIR
 uv run python -c "from rago_sync.inspector.versions import get_latest_version; print(get_latest_version('gllm-inference'))"
 ```
 It should print a real version, not `None`.
@@ -290,5 +290,5 @@ You: verify all
 
 ## Source
 
-CLI source: `/home/delfia-n-a-putri/Documents/Work/GEN_AI/Automation/rago-sync`
+CLI source: `$RAGO_SYNC_DIR`
 GitHub: https://github.com/delfianura/documentation-sync
