@@ -67,6 +67,7 @@ Use this for everything — day-to-day cookbook operations, GitBook-only request
 /sync-docs sync --entry tutorials/inference/lm_invoker
 /sync-docs verify --all
 /sync-docs status
+/sync-docs verify-coverage --ruff    # check codeblock-map.yaml against cookbook
 ```
 
 ### `gitbook-update` / `gitbook-check-for-update` — GitBook side only
@@ -85,8 +86,10 @@ skills/
       gitbook-mcp-patterns.md         ← how gitbook MCP calls are structured
       verification_failure_patterns.md ← common uv run failure patterns
       sync-flow.md                    ← background on the original cron-triggered flow
+      codeblock-map.yaml              ← YAML map: GitBook page → code blocks → .py files
     scripts/
       cookbook_sync.py                ← legacy reference script (pre-CLI era)
+      verify_coverage.py              ← checks codeblock-map.yaml against cookbook files
   gitbook-update/
     SKILL.md
     rules/

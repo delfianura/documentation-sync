@@ -60,7 +60,43 @@ Default to **ad-hoc** whenever a PR number, PR URL, branch name, or specific fea
    ```
    If the pinned floor predates the feature, find the first published version that has it and pin the entry's `pyproject.toml` to exactly that version (not a rounded-down `X.Y.0` — see gotcha 6 below). Re-run `uv lock && uv run <script>.py` and confirm output matches the README.
 4. **Gate before opening the PR:** if verification found an entry fails for any reason other than missing credentials/infra (`NOT_RUNNABLE` per gotcha #4) — e.g. `NameError` from an undefined variable copied verbatim from GitBook pseudocode — fix it or drop it from this PR. Do not ship an entry with a "Notes" column admitting it's broken; that's not a status report, it's an unfixed bug. See `references/verification_failure_patterns.md` #7–9 (found via PR #78 review: three entries were opened as known-broken pseudocode, plus an import-path mismatch and a dropped `load_dotenv()`/`python-dotenv` pairing slipped through).
-5. **Commit, push, open a PR** against the cookbook repo's `main` (a separate PR from the GitBook one — different repos).
+5. **Verify codeblock coverage** before opening the PR:
+   ```bash
+   python3 skills/sync-docs/scripts/verify_coverage.py --ruff \
+     --cookbook-root /path/to/gen-ai-sdk-cookbook
+   ```
+   This checks the coverage map (`references/codeblock-map.yaml`) for missing files, orphans, docstring URLs, and ruff. If you added/removed code blocks, update `codeblock-map.yaml` first (see "Codeblock coverage map" below).
+
+6. **Commit, push, open a PR** against the cookbook repo's `main` (a separate PR from the GitBook one — different repos).
+
+## Codeblock coverage map
+
+A YAML file at `references/codeblock-map.yaml` maps every GitBook tutorial page → code block headings → cookbook `.py` file. This is the authoritative registry of what the cookbook must cover.
+
+**Structure:**
+```yaml
+https://gdplabs.gitbook.io/sdk/gen-ai-sdk/tutorials/core/component:
+  entry_dir: core/component
+  blocks:
+    - heading: "Quickstart: Define Your First Component"
+      gitbook_anchor: "#quickstart"
+      cookbook_file: quickstart.py
+      runnable: true
+      notes: "TextFormatter with @main + execute + input schema"
+```
+
+**When adding new tutorial entries**: add a new top-level key with the GitBook page URL, `entry_dir`, and a `blocks` list.
+
+**When GitBook adds a new code block**: add a new entry to the page's `blocks` list, create the `.py` file, and re-run `verify_coverage.py`.
+
+**How-to-guide vs tutorial page**: some cookbook entries reference how-to-guide pages (e.g. `how-to-guides/add-a-custom-component`) while a tutorial page also exists for the same topic. Keep the existing `.py` file referencing the how-to-guide and add new `.py` files for the tutorial page's blocks. Both map to the same `entry_dir`. The README should list both references.
+
+**Verification script checks:**
+1. Missing files — block in map but no `.py` file
+2. Orphans — `.py` file not in map (aggregated per `entry_dir`)
+3. Docstring URLs — each `.py` references correct GitBook page
+4. Duplicates — same `cookbook_file` listed twice
+5. Ruff (with `--ruff`) — all mapped files pass `ruff check --select E,W,F`
 
 ## Trigger phrases → rago-sync commands (cookbook-only shortcuts)
 
