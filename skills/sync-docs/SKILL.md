@@ -62,16 +62,47 @@ Default to **ad-hoc** whenever a PR number, PR URL, branch name, or specific fea
 4. **Gate before opening the PR:** if verification found an entry fails for any reason other than missing credentials/infra (`NOT_RUNNABLE` per gotcha #4) — e.g. `NameError` from an undefined variable copied verbatim from GitBook pseudocode — fix it or drop it from this PR. Do not ship an entry with a "Notes" column admitting it's broken; that's not a status report, it's an unfixed bug. See `references/verification_failure_patterns.md` #7–9 (found via PR #78 review: three entries were opened as known-broken pseudocode, plus an import-path mismatch and a dropped `load_dotenv()`/`python-dotenv` pairing slipped through).
 5. **Verify codeblock coverage** before opening the PR:
    ```bash
+   # Generate or update the coverage map from the cookbook directory:
+   python3 skills/sync-docs/scripts/generate_map.py \
+     --cookbook-root /path/to/gen-ai-sdk-cookbook \
+     --map skills/sync-docs/references/codeblock-map.yaml \
+     --scope core \
+     --merge-existing
+
+   # Verify the map (missing files, orphans, docstrings, ruff):
    python3 skills/sync-docs/scripts/verify_coverage.py --ruff \
-     --cookbook-root /path/to/gen-ai-sdk-cookbook
+     --cookbook-root /path/to/gen-ai-sdk-cookbook \
+     --map skills/sync-docs/references/codeblock-map.yaml
    ```
-   This checks the coverage map (`references/codeblock-map.yaml`) for missing files, orphans, docstring URLs, and ruff. If you added/removed code blocks, update `codeblock-map.yaml` first (see "Codeblock coverage map" below).
+   `generate_map.py` auto-discovers `.py` files, extracts GitBook URLs from docstrings,
+   and groups them by page. Use `--merge-existing` to preserve manual annotations
+   (headings, anchors, notes). Use `--scope` to limit to a specific lib (e.g., `core`,
+   `inference`). Use `--csv` to supply the old `gitbook-to-cookbook-mapping.csv` for
+   URL lookup on entries that lack docstrings.
 
 6. **Commit, push, open a PR** against the cookbook repo's `main` (a separate PR from the GitBook one — different repos).
 
 ## Codeblock coverage map
 
 A YAML file at `references/codeblock-map.yaml` maps every GitBook tutorial page → code block headings → cookbook `.py` file. This is the authoritative registry of what the cookbook must cover.
+
+**Generating the map**: `generate_map.py` auto-discovers all `.py` files in the cookbook directory, extracts GitBook URLs from their docstrings (or falls back to CSV mapping / heuristic URLs), and writes the YAML map. This works for **any lib** in the cookbook (core, inference, retrieval, etc.), not just gllm-core.
+
+```bash
+# Generate for a specific lib:
+python3 skills/sync-docs/scripts/generate_map.py \
+  --cookbook-root /path/to/gen-ai-sdk-cookbook --scope core
+
+# Generate for the entire cookbook (all libs):
+python3 skills/sync-docs/scripts/generate_map.py \
+  --cookbook-root /path/to/gen-ai-sdk-cookbook \
+  --csv gitbook-to-cookbook-mapping.csv
+
+# Merge with existing map (preserve manual annotations):
+python3 skills/sync-docs/scripts/generate_map.py \
+  --cookbook-root /path/to/gen-ai-sdk-cookbook --scope inference \
+  --merge-existing
+```
 
 **Structure:**
 ```yaml
@@ -85,18 +116,25 @@ https://gdplabs.gitbook.io/sdk/gen-ai-sdk/tutorials/core/component:
       notes: "TextFormatter with @main + execute + input schema"
 ```
 
-**When adding new tutorial entries**: add a new top-level key with the GitBook page URL, `entry_dir`, and a `blocks` list.
+**When adding new tutorial entries**: run `generate_map.py --scope <lib> --merge-existing` to auto-discover new `.py` files, then fill in headings/anchors/notes manually.
 
 **When GitBook adds a new code block**: add a new entry to the page's `blocks` list, create the `.py` file, and re-run `verify_coverage.py`.
 
 **How-to-guide vs tutorial page**: some cookbook entries reference how-to-guide pages (e.g. `how-to-guides/add-a-custom-component`) while a tutorial page also exists for the same topic. Keep the existing `.py` file referencing the how-to-guide and add new `.py` files for the tutorial page's blocks. Both map to the same `entry_dir`. The README should list both references.
 
 **Verification script checks:**
-1. Missing files — block in map but no `.py` file
-2. Orphans — `.py` file not in map (aggregated per `entry_dir`)
-3. Docstring URLs — each `.py` references correct GitBook page
-4. Duplicates — same `cookbook_file` listed twice
-5. Ruff (with `--ruff`) — all mapped files pass `ruff check --select E,W,F`
+1. Missing files — block in map but no `.py` file (ERROR)
+2. Orphans — `.py` file not in map (WARNING, aggregated per `entry_dir`)
+3. Docstring URLs — each `.py` references correct GitBook page (WARNING)
+4. Duplicates — same `cookbook_file` listed twice (ERROR)
+5. Ruff (with `--ruff`) — all mapped files pass `ruff check --select E,W,F` (ERROR)
+
+**General usage** — `generate_map.py` and `verify_coverage.py` work for any cookbook checkout:
+```bash
+# Any cookbook root, any scope:
+python3 scripts/generate_map.py --cookbook-root /any/cookbook --scope any_lib
+python3 scripts/verify_coverage.py --cookbook-root /any/cookbook --map /path/to/map.yaml --ruff
+```
 
 ## Trigger phrases → rago-sync commands (cookbook-only shortcuts)
 

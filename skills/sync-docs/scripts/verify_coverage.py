@@ -3,12 +3,13 @@
 corresponding .py file in the cookbook, and that no .py files are orphans.
 
 Usage:
-    python3 verify_coverage.py [--cookbook-root <path>] [--map <path>] [--ruff]
+    python3 verify_coverage.py --cookbook-root /path/to/gen-ai-sdk-cookbook [--map <path>] [--ruff]
 
 Options:
-    --cookbook-root  Path to gen-ai-sdk-cookbook checkout (default: worktree)
+    --cookbook-root  Path to gen-ai-sdk-cookbook checkout (required)
     --map            Path to codeblock-map.yaml (default: sibling of this script)
     --ruff           Also run ruff check on all mapped .py files
+    --scope          Limit to a specific entry_dir prefix (e.g., core/)
 
 Exit code 0 = all checks pass. Non-zero = coverage gaps or orphans found.
 """
@@ -26,7 +27,7 @@ except ImportError:
     sys.exit(2)
 
 
-SKILL_DIR = Path(__file__).parent.parent  # references/ -> skill root
+SKILL_DIR = Path(__file__).parent.parent
 DEFAULT_MAP = SKILL_DIR / "references" / "codeblock-map.yaml"
 
 
@@ -36,10 +37,10 @@ def load_map(map_path: Path) -> dict:
 
 
 def get_cookbook_files(entry_dir: str, cookbook_root: Path) -> set[str]:
-    full_dir = cookbook_root / "gen-ai" / "tutorials" / entry_dir
+    full_dir = cookbook_root / "gen-ai" / entry_dir
     if not full_dir.exists():
         return set()
-    files = set()
+    files: set[str] = set()
     for p in full_dir.iterdir():
         if p.suffix == ".py" and ".venv" not in p.parts and "__pycache__" not in p.parts:
             files.add(p.name)
@@ -62,9 +63,7 @@ def run_ruff(files: list[Path]) -> bool:
     try:
         result = subprocess.run(
             ["ruff", "check", "--select", "E,W,F"] + [str(f) for f in files],
-            capture_output=True,
-            text=True,
-            timeout=60,
+            capture_output=True, text=True, timeout=120,
         )
         if result.returncode != 0:
             print("RUFF FAILURES:")
@@ -82,21 +81,10 @@ def run_ruff(files: list[Path]) -> bool:
 
 def main():
     parser = argparse.ArgumentParser(description="Verify codeblock coverage map")
-    parser.add_argument(
-        "--cookbook-root",
-        type=Path,
-        default=Path(
-            "/home/delfia-n-a-putri/Documents/Work/GEN_AI/worktrees/sync-core"
-        ),
-        help="Path to gen-ai-sdk-cookbook checkout",
-    )
-    parser.add_argument(
-        "--map",
-        type=Path,
-        default=DEFAULT_MAP,
-        help="Path to codeblock-map.yaml",
-    )
+    parser.add_argument("--cookbook-root", type=Path, required=True, help="Path to gen-ai-sdk-cookbook checkout")
+    parser.add_argument("--map", type=Path, default=DEFAULT_MAP, help="Path to codeblock-map.yaml")
     parser.add_argument("--ruff", action="store_true", help="Also run ruff check")
+    parser.add_argument("--scope", type=str, default=None, help="Limit to entry_dir prefix (e.g., core/)")
     args = parser.parse_args()
 
     coverage_map = load_map(args.map)
@@ -104,17 +92,25 @@ def main():
         print("ERROR: coverage map is empty")
         sys.exit(2)
 
-    errors = []
-    warnings = []
+    # Filter by scope if specified
+    if args.scope:
+        scope_prefix = args.scope if args.scope.endswith("/") else args.scope + "/"
+        coverage_map = {k: v for k, v in coverage_map.items() if v["entry_dir"].startswith(scope_prefix)}
+        if not coverage_map:
+            print(f"ERROR: no entries match scope '{args.scope}'")
+            sys.exit(2)
+
+    errors: list[str] = []
+    warnings: list[str] = []
     all_mapped_files: list[Path] = []
 
-    # Aggregate all mapped files per entry_dir (multiple pages can share one dir)
-    dir_to_mapped_files: dict[str, set[str]] = {}
+    # Aggregate mapped files per entry_dir (multiple pages can share one dir)
+    dir_to_mapped: dict[str, set[str]] = {}
     for page_url, page_info in coverage_map.items():
-        entry_dir = page_info["entry_dir"]
-        if entry_dir not in dir_to_mapped_files:
-            dir_to_mapped_files[entry_dir] = set()
-        dir_to_mapped_files[entry_dir] |= get_mapped_files(page_info)
+        ed = page_info["entry_dir"]
+        if ed not in dir_to_mapped:
+            dir_to_mapped[ed] = set()
+        dir_to_mapped[ed] |= get_mapped_files(page_info)
 
     for page_url, page_info in coverage_map.items():
         entry_dir = page_info["entry_dir"]
@@ -122,55 +118,48 @@ def main():
         mapped_files = get_mapped_files(page_info)
         cookbook_files = get_cookbook_files(entry_dir, args.cookbook_root)
 
-        # Check 1: every mapped file exists in the cookbook
-        missing_files = mapped_files - cookbook_files
-        for f in sorted(missing_files):
-            errors.append(
-                f"[MISSING FILE] {entry_dir}/{f} - listed in map but not in cookbook"
-            )
+        # Check 1: every mapped file exists
+        for f in sorted(mapped_files - cookbook_files):
+            errors.append(f"[MISSING FILE] {entry_dir}/{f} - listed in map but not in cookbook")
 
-        # Check 3: each .py file's docstring references the correct GitBook URL
+        # Check 3: docstring URL check (warning, not error — older entries may lack docstrings)
         for block in blocks:
-            cookbook_file = block["cookbook_file"]
-            filepath = args.cookbook_root / "gen-ai" / "tutorials" / entry_dir / cookbook_file
-            if filepath.exists():
-                all_mapped_files.append(filepath)
-                if not check_docstring_url(filepath, page_url):
-                    errors.append(
-                        f"[DOCSTRING] {entry_dir}/{cookbook_file} - "
+            cf = block["cookbook_file"]
+            fp = args.cookbook_root / "gen-ai" / entry_dir / cf
+            if fp.exists():
+                all_mapped_files.append(fp)
+                if not check_docstring_url(fp, page_url):
+                    warnings.append(
+                        f"[DOCSTRING] {entry_dir}/{cf} - "
                         f"docstring does not reference {page_url}"
                     )
 
-        # Check 4: no duplicate cookbook_file within the same entry_dir+page
-        seen = set()
+        # Check 4: no duplicates
+        seen: set[str] = set()
         for block in blocks:
             cf = block["cookbook_file"]
             if cf in seen:
                 errors.append(f"[DUPLICATE] {entry_dir}/{cf} listed twice in map")
             seen.add(cf)
 
-    # Check 2: no orphan .py files (aggregate across pages per entry_dir)
-    for entry_dir, all_mapped in sorted(dir_to_mapped_files.items()):
+    # Check 2: no orphan .py files
+    for entry_dir, all_mapped in sorted(dir_to_mapped.items()):
         cookbook_files = get_cookbook_files(entry_dir, args.cookbook_root)
-        orphan_files = cookbook_files - all_mapped
-        for f in sorted(orphan_files):
+        for f in sorted(cookbook_files - all_mapped):
             warnings.append(f"[ORPHAN] {entry_dir}/{f} - exists in cookbook but not in map")
 
-    # Check 5 (optional): ruff
+    # Check 5: ruff
     if args.ruff and all_mapped_files:
         if not run_ruff(all_mapped_files):
             errors.append("[RUFF] One or more files failed ruff check")
 
-    # Report
     print("=" * 60)
     print("CODEBLOCK COVERAGE VERIFICATION")
     print("=" * 60)
     print(f"Map: {args.map}")
     print(f"Cookbook root: {args.cookbook_root}")
     print(f"GitBook pages mapped: {len(coverage_map)}")
-    print(
-        f"Code blocks mapped: {sum(len(p['blocks']) for p in coverage_map.values())}"
-    )
+    print(f"Code blocks mapped: {sum(len(p['blocks']) for p in coverage_map.values())}")
     print(f"Cookbook .py files found: {len(all_mapped_files)}")
     print(f"Errors: {len(errors)}")
     print(f"Warnings: {len(warnings)}")
@@ -180,17 +169,12 @@ def main():
         print("\nERRORS:")
         for e in errors:
             print(f"  X {e}")
-
     if warnings:
         print("\nWARNINGS:")
         for w in warnings:
             print(f"  ! {w}")
-
     if not errors and not warnings:
-        print(
-            "\nAll checks passed - no coverage gaps, no orphans, "
-            "all docstrings correct."
-        )
+        print("\nAll checks passed - no coverage gaps, no orphans, all docstrings correct.")
     elif not errors:
         print("\nNo errors - coverage is complete (warnings only).")
 

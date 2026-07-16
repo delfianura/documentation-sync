@@ -89,6 +89,7 @@ skills/
       codeblock-map.yaml              ← YAML map: GitBook page → code blocks → .py files
     scripts/
       cookbook_sync.py                ← legacy reference script (pre-CLI era)
+      generate_map.py                 ← auto-generate codeblock-map.yaml from cookbook .py files
       verify_coverage.py              ← checks codeblock-map.yaml against cookbook files
   gitbook-update/
     SKILL.md
