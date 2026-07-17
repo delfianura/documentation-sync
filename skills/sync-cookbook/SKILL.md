@@ -1,23 +1,11 @@
 ---
 name: sync-cookbook
-description: RAGO Sync — detect and fix drift between gl-sdk main → Gitbook → cookbook. Backed by the rago-sync Python CLI. Use for any drift detection, sync, verify, or status check.
+description: RAGO Sync — detect and fix drift between gl-sdk main → Gitbook → cookbook. Backed by the rago-sync Python CLI at /home/delfia-n-a-putri/Documents/Work/GEN_AI/Automation/rago-sync. Use for any drift detection, sync, verify, or status check.
 ---
 
 # sync-cookbook
 
 LLM bridge to the rago-sync CLI. All logic lives in Python — this skill maps intent to the right command and ensures cookbook code conventions are followed.
-
-## Environment
-
-This skill uses three env vars instead of hardcoded paths:
-
-| Variable | Meaning | Typical value |
-|---|---|---|
-| `\` | rago-sync repo root (CLI source + CSV mapping) | `~/Documents/Work/GEN_AI/Automation/rago-sync` |
-| `\` | gen-ai-sdk-cookbook checkout root | `~/Documents/Work/GEN_AI/gen-ai-sdk-cookbook` |
-| `\` | Parent dir for sync worktrees | `~/Documents/Work/GEN_AI/worktrees` |
-
-Set them before running commands from this skill.
 
 ## When to sync (trigger taxonomy)
 
@@ -44,7 +32,7 @@ Sync is **not** a single monolithic operation. There are three distinct scenario
 1. Run `uv run rago-sync detect` to find `CONTENT_DRIFT` entries.
 2. For each drifted entry, inspect the current cookbook script vs the GitBook source:
    ```bash
-   cat $COOKBOOK_DIR/gen-ai/<entry_path>/*.py
+   cat /home/delfia-n-a-putri/Documents/Work/GEN_AI/gen-ai-sdk-cookbook/gen-ai/<entry_path>/*.py
    ```
 3. Run `uv run rago-sync sync --entry <path>` to overwrite from GitBook.
 4. Re-add `release_resources()`, `load_dotenv()`, and self-contained setup (GitBook snippets are fragments — see "GitBook fragments" below).
@@ -64,6 +52,45 @@ Sync is **not** a single monolithic operation. There are three distinct scenario
 4. After the GitBook PR merges, re-run `sync --entry` to pull the fixed code, then `verify` again.
 
 **Key risk**: GitBook snippets are often **fragments** — they reference variables defined earlier in the tutorial page. A snippet that works in GitBook's narrative flow may fail as a standalone `.py` file. The cookbook script must be self-contained.
+
+## Trigger 0.5: Pre-flight `gitbook.check-for-update` (MANDATORY before any sync)
+
+Before running `rago-sync detect`, `sync`, or manually syncing any entry, run the gl-sdk
+`gitbook.check-for-update` workflow in **read-only / Mode 2 (Full Audit)** mode against the
+target guide/tutorial pages.
+
+Why mandatory: `docs/gitbook-sync` can advance ahead of `gl-sdk main`. When that happens the
+GitBook pages document APIs that do not yet exist in the released packages. Blindly syncing
+from those pages overwrites working cookbook scripts with broken examples, converts a
+`COMPLIANT` entry into `NOT_RUNNABLE`, and produces `GITBOOK_DRIFT` — an entry state that
+means *"the docs are wrong, not the cookbook"*.
+
+How to run (read-only — no edits, no commits):
+1. Switch to the gl-sdk worktree that has `.ai/workflows/gitbook-check-for-update.md`
+   (e.g. `~/Documents/Work/GEN_AI/gl-sdk` or any feature worktree derived from it).
+2. Run the workflow in Mode 2 (no `$ARGUMENTS`) or Mode 1 (provide the relevant PR/branch).
+   The workflow produces a structured gap report listing every affected GitBook file and its
+   coverage classification.
+3. Inspect the report. If any page is classified `GITBOOK_DRIFT` (documented APIs don't exist
+   on `main`) or `OUTDATED` / `UNDOCUMENTED` for the current feature scope, **STOP**.
+
+### Response rules for `GITBOOK_DRIFT`
+
+| Situation | Action |
+|---|---|
+| GitBook docs a method that doesn't exist on `main` yet | Open a GitHub issue in `GDP-ADMIN/gl-sdk`; do **not** sync the cookbook. |
+| GitBook docs were correct but an intermediate `docs/gitbook-sync` commit broke them | File issue against the docs branch; wait for the docs PR to fix before syncing. |
+| A gl-sdk feature branch already has the new API but `main` doesn't | Wait for the feature branch to merge, then re-run the check before syncing. |
+| Multiple cookbook entries already drifted toward the future API | Revert the cookbook scripts to the last known-good version; re-apply after `main` catches up. |
+
+**Never** run `rago-sync sync --entry` against a `GITBOOK_DRIFT` page. `sync` would overwrite
+the cookbook `.py` with the broken example and then `verify` would mark it `NOT_RUNNABLE` —
+conflating *"docs are wrong"* with *"cookbook code is wrong"*. These are different failure
+modes and require different fixes.
+
+### When this check produces `COMPLIANT` / `DOCUMENTED`
+
+Continue to the normal sync flow (Trigger 1, 2, or 3 as appropriate).
 
 ## Trigger 0: Merge doc subpages into a main page BEFORE syncing
 
@@ -134,6 +161,16 @@ Run the main page against `.ai/rules/gitbook-update-tutorials.md`. The data-stor
   5. **Update the parent `README.md`** with a table mapping each entry directory to its GitBook URL.
   6. Commit the restructure as a single commit — `git add` picks up renames automatically, so the diff is readable.
 
+## Router / multi-variant tutorial layout
+
+Some GitBook tutorial pages are a **hub with variant subpages** instead of a single page with sections. Examples: `tutorials/orchestration/routing/` with `rule-based-router/`, `semantic-router/`, `lm-based-router/`, `similarity-based-router/`.
+
+For these:
+- The parent directory is a **real cookbook entry** and needs the standard boilerplate: `.env.example`, `.python-version`, `pyproject.toml`, `README.md`, `setup.bat`, `setup.sh`, `uv.lock`.
+- Each variant subdirectory also needs the same boilerplate because users need to `cd` into it and run `setup.sh` / `uv run python <script>.py`.
+- The parent `README.md` should link to each subdirectory; each subdirectory `README.md` can be minimal or omitted if the parent links are sufficient.
+- Do **not** create routing examples if the installed `gllm-pipeline` router module cannot import cleanly at runtime — see `BLOCKED_ON_INFRA` in Entry states. Record the gap and continue; do not upload fragile wrappers.
+
 ## CLI commands
 
 | Command | What it does | Auth |
@@ -150,7 +187,7 @@ Run the main page against `.ai/rules/gitbook-update-tutorials.md`. The data-stor
 All commands run from the rago-sync project root:
 
 ```bash
-cd $RAGO_SYNC_DIR
+cd /home/delfia-n-a-putri/Documents/Work/GEN_AI/Automation/rago-sync
 uv run rago-sync <command> [options]
 ```
 
@@ -161,7 +198,7 @@ uv run rago-sync <command> [options]
 - PR #75 created `lm_invoker_basic_usage/` (prefixed folder) instead of `basic_usage/` (GitBook section heading). This required PR #88 to delete 11 prefixed duplicates and rename them.
 - Convention-based mapping can't handle pages where the GitBook heading doesn't match the folder slug.
 
-**A CSV mapping file exists** at `$RAGO_SYNC_DIR/gitbook-to-cookbook-mapping.csv` (generated Jul 7, updated Jul 16). It has columns: `Type,GitBook Path,Cookbook Path,Status`. This is a snapshot, not a live lookup — but it MUST be kept in sync after structural changes.
+**A CSV mapping file exists** at `/home/delfia-n-a-putri/Documents/Work/GEN_AI/Automation/rago-sync/gitbook-to-cookbook-mapping.csv` (generated Jul 7, updated Jul 16). It has columns: `Type,GitBook Path,Cookbook Path,Status`. This is a snapshot, not a live lookup — but it MUST be kept in sync after structural changes.
 
 **After any structural sync** (merging/restructuring cookbook directories), update the CSV to match the new layout — remove old entries that were deleted/merged, add new `SYNCED` entries for the new directories, and mark resource pages as `skip`. A stale CSV causes phantom `MISSING` results in future `detect` runs. New statuses: `SYNCED` (entry verified and up-to-date), `RESOURCE_PAGE` (not a tutorial, skip), `BLOCKED_ON_INFRA` (entry needs external infra to verify).
 
@@ -186,14 +223,14 @@ uv run rago-sync <command> [options]
 
 1. Check sparse checkout — if `gen-ai/tutorials/` isn't checked out, everything shows as MISSING:
    ```bash
-   git -C $COOKBOOK_DIR sparse-checkout list
+   git -C /home/delfia-n-a-putri/Documents/Work/GEN_AI/gen-ai-sdk-cookbook sparse-checkout list
    # If missing:
-   git -C $COOKBOOK_DIR sparse-checkout add gen-ai/tutorials/retrieval
-   git -C $COOKBOOK_DIR checkout
+   git -C /home/delfia-n-a-putri/Documents/Work/GEN_AI/gen-ai-sdk-cookbook sparse-checkout add gen-ai/tutorials/retrieval
+   git -C /home/delfia-n-a-putri/Documents/Work/GEN_AI/gen-ai-sdk-cookbook checkout
    ```
 2. Verify branch is `main` (or the PR branch you're working on):
    ```bash
-   git -C $COOKBOOK_DIR branch --show-current
+   git -C /home/delfia-n-a-putri/Documents/Work/GEN_AI/gen-ai-sdk-cookbook branch --show-current
    ```
 
 ### B. After `sync --entry` (before committing)
@@ -213,9 +250,13 @@ uv run rago-sync <command> [options]
 
 2. **Self-contained script** — GitBook snippets may reference variables defined earlier in the tutorial (e.g. `vector_datastore` used but never assigned). Cookbook scripts must be standalone. Add missing definitions or note them in the PR description.
 
-3. **`load_dotenv()`** — if the script needs API keys, check that `load_dotenv()` is called and `.env.example` exists.
+3. **`load_dotenv()`** — if the script uses API keys, check that `load_dotenv()` is called and `.env.example` exists.
 
-4. **No side-effects at import time** — module body must not mutate global process state (`os.environ[...] = ...`, `logging.basicConfig(...)`), create files, or instantiate resource-holding objects (e.g. `logging.FileHandler("app.log")`). Wrap all such calls inside `main()` / `run_example()` guarded by `if __name__ == "__main__":`.
+4. **No side-effects at import time** — module body must not:
+   - Mutate global process state (`os.environ[...] = ...`, `logging.basicConfig(...)`).
+   - Create files or network connections.
+   - Instantiate objects that hold resources (e.g. `logging.FileHandler("app.log")`).
+   Wrap all such calls inside `main()` / `run_example()` guarded by `if __name__ == "__main__":`.
 
 ### C. Before opening a PR — mandatory verification
 
@@ -225,11 +266,53 @@ Even credential-blocked entries surface `NameError` and `ImportError` before hit
 
 For entries requiring external infra (Elasticsearch, SmartSearch, etc.): attempt `uv run`, confirm the error is infra-related (not a code bug), and note it in the PR description.
 
-### D. Skip detect when you already know the entry
+For AST-level checks against imported name-shadowing and import-time side-effect anti-patterns, run:
+```bash
+python3 scripts/verify_import_side_effects.py --root <entry_dir>
+# or for the shadow-specific rule:
+python3 scripts/verify_import_side_effects.py --check-import-shadow <entry_dir>
+```
+For full codeblock coverage verification, see `scripts/verify_coverage.py`.
 
-If the user gives a specific gl-sdk PR/feature and you've already located the GitBook page and confirmed the fix, skip `detect` — go straight to editing the cookbook entry, then verify + PR. `detect` is for discovering *what's* drifted across the whole cookbook and can time out (120s+) on large scans. Use `rago-sync status` instead to read persisted results from the last `detect` run without re-scanning.
+### D. Skip detect when you already know the entry... [full existing text] ...
 
 **Two-way sync timing**: `rago-sync sync --entry` compares against the *live* published GitBook page. If the GitBook update is still an unmerged docs PR, edit the cookbook entry by hand to mirror that PR's diff — don't use `sync`.
+
+### Trigger -1: Pre-flight GitBook drift check (MANDATORY before any sync)
+
+Before running `sync` / `sync --entry`, ALWAYS run the gl-sdk `gitbook-check-for-update` workflow
+as a read-only pre-flight. This surfaces `GITBOOK_DRIFT` (docs reference APIs not yet on main)
+and `CONTENT_DRIFT` conditions that the rago-sync CLI alone cannot detect.
+
+Invocation (run from gl-sdk worktree, **never from the cookbook repo**):
+
+```
+gitbook.check-for-update
+# or with a specific scope:
+gitbook.check-for-update tutorials/orchestration/pipeline
+gitbook.check-for-update guides/human-in-the-loop
+```
+
+If the workflow reports `GITBOOK_DRIFT`:
+  → DO NOT run `sync` yet.
+  → Either (a) open a GitHub issue in gl-labs/gl-sdk describing the drifted pages, or
+        (b) wait for the feature branch to land on main, then re-run the check.
+  → Only sync after GitBook is consistent with what main actually ships.
+
+If the workflow reports `CONTENT_DRIFT` only:
+  → Continue to the normal sync flow above.
+
+The `sync-cookbook` skill itself does not implement this workflow; it delegates to the gl-sdk
+`.ai/workflows/gitbook-check-for-update.md` file, which any agent running inside the gl-sdk
+worktree can follow.
+
+**API-grounding check (MANDATORY before syncing how-to / pipeline / orchestration pages)**: The GitBook pipeline/orchestration guides have historically documented APIs (`enable_debug_tracing`, `disable_debug_tracing`, `include_outputs_from`, `get_state_history`, `fork_from`, `get_state`, `update_state`, `Pipeline.resume()`, `Pipeline.invoke(..., context=...)`) before those methods land on `gl-sdk main`. Before running `rago-sync sync --entry` on any entry that touches `Pipeline`, verify each method used in the GitBook page actually exists on the currently installed `gllm-pipeline`:
+
+```bash
+uv run python -c "from gllm_pipeline.pipeline.pipeline import Pipeline; print([m for m in dir(Pipeline) if m in ['enable_debug_tracing','fork_from','get_state','get_state_history','resume','update_state','invoke']])"
+```
+
+If any expected method is missing, **do not sync** — report `GITBOOK_DRIFT` and open a GitHub issue instead. See `GITBOOK_DRIFT: docs are wrong, not the cookbook` below.
 
 ### E. Use GitBook MCP tools to fetch current page content
 
@@ -243,14 +326,20 @@ This is the primary method for manual sync when the CLI is unavailable. Always c
 
 Always create a git worktree for sync edits — never work directly on `main`:
 ```bash
-cd $COOKBOOK_DIR
-git worktree add $WORKTREE_DIR/sync-<scope> -b feat/sync-<scope>-tutorials main
+cd /home/delfia-n-a-putri/Documents/Work/GEN_AI/gen-ai-sdk-cookbook
+git worktree add /home/delfia-n-a-putri/Documents/Work/GEN_AI/worktrees/sync-<scope> -b feat/sync-<scope>-tutorials main
 ```
 Set sparse checkout to include the tutorial directories you need:
 ```bash
 cd <worktree> && git sparse-checkout set gen-ai/tutorials/core gen-ai/how-to-guides
 ```
-After editing, commit with Conventional Commits format (GPG signed), then open a PR with `gh pr create`.
+After editing, commit with Conventional Commits format (GPG signed), then open a PR with `gh pr create`:
+```bash
+git push -u origin feat/sync-<scope>-tutorials
+gh pr create --base main --head feat/sync-<scope>-tutorials --title "..." --body "..."
+```
+
+**`gh pr create` remote-head format**: if the branch is on a forked account (e.g. `delfianura`), either omit `--head` entirely after pushing with `-u`, or pass the bare branch name without a username prefix. Passing `--head delfianura:feat/...` causes "No commits between main and branch" because GitHub does not resolve the colon form from a non-owner fork in the same repo context.
 
 ### G. Check latest published version for version pinning
 
@@ -350,11 +439,35 @@ Not every code block on a GitBook page is a standalone runnable example. Some ar
 The coverage map (`references/codeblock-map.yaml`) is the authoritative registry. The `runnable` field on each block indicates whether the cookbook script is standalone runnable. The cookbook author makes each script self-contained by:
 1. Adding missing variable definitions.
 2. Adding necessary imports.
-3. Wrapping in `async def main()` + `if __name__ == "__main__"`.
+3. Wrapping in `async def main()` + `if __name__ == "__main__": asyncio.run(main())` (or `def main()` for sync-only scripts).
 
-If a GitBook page adds new code blocks not in the map, the author must add them to `codeblock-map.yaml` and create the corresponding `.py` file. Run `verify_coverage.py` to confirm completeness.
+#### Fragile-standalone guardrail
 
-### Ruff check (mandatory)
+GitBook code blocks often omit boilerplate that `gllm-pipeline` requires at runtime. After creating a new script from a snippet, always run `uv run`; **do not mark it verified just because it imports successfully**. Known failure modes:
+- **Missing `state_type` / wrong type**: GitBook often omits `state_type` entirely, but the installed resolver requires `TypedDict` or `BaseModel`. `state_type=dict` raises `ValueError`. Fix: define a minimal `TypedDict` with only the fields this block reads/writes.
+- **Conditional/control-flow steps without a checkpointer**: `if_else`, `switch`, `toggle`, `no_op`, `guard`, `try_catch`, and `map_reduce` have hit `RuntimeError: 'NoneType' object is not iterable` inside LangGraph when run without a checkpointer. Fix: add `checkpointer=InMemorySaver()` or use the verified pipeline pattern.
+- **Imports that only resolve in the full package context**: Some names are exported under different modules than the docs imply. Verify with: `PYTHONPATH= uv run python -c "from gllm_pipeline.steps import X"`.
+- **`goto` target resolution**: `goto(target=...)` expects target names to be reachable in the state/config; missing keys produce `KeyError`. Skipping unverifiable control-flow blocks is acceptable.
+
+If a GitBook page is **prose/reference with no runnable blocks** (e.g., Routing), record it in the `README.md` as reference-only and skip `.py` creation rather than uploading fragile wrappers.
+
+### Multi-variant sections: one section, multiple files when justified
+
+If a GitBook page adds new code blocks not in the map, the author must add them to `codeblock-map.yaml` and create the corresponding `.py` file. Run `verify_coverage.py` to confirm completeness. Collected failure patterns from standalone-wrapping GitBook snippets live in `references/standalone-failure-patterns.md`.
+
+### `async def main()` anti-pattern from GitBook copy-paste
+
+GitBook sometimes shows `async def main()` even when the function body only calls `asyncio.run(...)` internally. If the entry point calls `main()` without `asyncio.run(main())`, Python emits `RuntimeWarning: coroutine 'main' was never awaited` and the function's body silently does not execute.
+
+**Fix patterns**:
+- If `main()` internally calls `asyncio.run(...)` → change `main` to `def main()` and call it directly.
+- If `main()` genuinely awaits coroutines → keep `async def main()` and use `if __name__ == "__main__": asyncio.run(main())`.
+
+Check for this immediately after creating a new script from a GitBook snippet.
+
+If a GitBook page adds new code blocks not in the map, the author must add them to `codeblock-map.yaml` and create the corresponding `.py` file. Run `verify_coverage.py` to confirm completeness. Collected failure patterns from standalone-wrapping GitBook snippets live in `references/standalone-failure-patterns.md`.
+
+### `async def main()` anti-pattern from GitBook copy-paste
 
 After writing/editing cookbook `.py` files, run ruff:
 ```bash
@@ -390,6 +503,7 @@ Before starting sync work:
 Every cookbook `.py` file should:
 - Have a module docstring with a reference link to the GitBook page (use `#anchor` for section-specific scripts)
 - Use `async def main()` + `if __name__ == "__main__": asyncio.run(main())` (or `def main()` for sync-only scripts)
+- **GitBook often shows `async def main()` with `asyncio.run(...)` inside the body** — calling `main()` directly produces `RuntimeWarning: coroutine 'main' was never awaited`. Fix by changing `main()` to `def main()` when it internally uses `asyncio.run(...)`.
 - Call `release_resources()` on all invokers in a `finally` block
 - Be self-contained (no undefined variables)
 - Call `load_dotenv()` if it needs API keys
@@ -456,6 +570,27 @@ The `entry_dir` field in `codeblock-map.yaml` must be the full path relative to 
 
 Entries requiring Google service account credentials will always be `NOT_RUNNABLE` locally without auth. The code is valid — it just can't execute without credentials.
 
+### Router subpackage import side-effect blocks runtime verification
+
+`gllm_pipeline.router` eagerly imports `classifier_router` at module import time. In a minimal venv, that pulls `torch` indirectly, so **even a syntax-correct router script fails before reaching `router.route(...)`** with `ModuleNotFoundError: No module named 'torch'`.
+
+This means:
+- `ruff check` and `py_compile` can pass for router examples.
+- `uv run python <router_script>.py` may still fail at import time.
+- Do not mark router coverage as fully verified until the actual import path is resolved; record it as `BLOCKED_ON_INFRA` / reference-only in the README until the package installs the optional `torch` dependency or its `__init__` stops eagerly importing classifier backends.
+
+### GitBook router credential shape may be stale
+
+The live GitBook routing pages still show:
+```python
+credentials="<YOUR_OPENAI_API_KEY>"
+```
+but the installed `gllm-pipeline v0.5.18` `build_em_invoker` / `build_lm_request_processor` APIs expect credentials as a mapping:
+```python
+credentials={"api_key": "<YOUR_OPENAI_API_KEY>"}
+```
+When manually syncing router examples, ground the credential shape against the currently installed package, not the GitBook prose.
+
 ### Token expiry mid-run
 
 `gcloud` tokens last ~1hr. For long `sync`/`verify --all` runs, rago-sync refreshes tokens before every subprocess call. If driving `uv`/`curl` manually outside the CLI, re-run `gcloud auth print-access-token` right before each call.
@@ -468,8 +603,7 @@ Entries requiring Google service account credentials will always be `NOT_RUNNABL
 | `GoogleLMInvoker`, `GoogleEMInvoker` | `gllm-inference[google]` |
 | `AnthropicLMInvoker` | `gllm-inference[anthropic]` |
 | `ChromaDataStore` | `gllm-datastore[chroma]` |
-| Any `from gllm_datastore...` import | `gllm-datastore[chroma]` — `__init__` eagerly imports `chromadb` even for non-Chroma entries (e.g. `key_value_store` needs it). When in doubt, always add `[chroma]`. |
-| Any `gllm_datastore.*` import (incl. `key_value_store`) | `gllm-datastore[chroma]` — the package `__init__` eagerly imports `ChromaDataStore`, so even non-Chroma entries (e.g. `OpenBaoKeyValueStore`) need the `[chroma]` extra or `ImportError: missing 'chromadb'` fires at import time. |
+| Any `from gllm_datastore...` import (incl. non-Chroma entries like `key_value_store`) | `gllm-datastore[chroma]` — the package `__init__` eagerly imports `ChromaDataStore`, so even entries that never touch Chroma (e.g. `OpenBaoKeyValueStore`) need the `[chroma]` extra or `ImportError: missing 'chromadb'` fires at import time. When in doubt, always add `[chroma]`. |
 
 ### Version pinning
 
@@ -479,14 +613,63 @@ Pin the exact latest version: `>=0.6.90,<0.7.0`, not a rounded-down floor like `
 
 Each `gllm-*` package pins its own `gllm-core` floor/ceiling. Pinning every package to "the latest" independently can produce an **unsatisfiable** resolution. Real failure during the data_store sync (PR #92): `gllm-inference==0.6.98` requires `gllm-core>=0.4.21,<0.4.37`, but the latest published `gllm-core` was `0.4.37.post1` — `uv lock` failed with "your project's requirements are unsatisfiable". Fix: drop to `gllm-inference>=0.6.95,<0.7.0` (0.6.95 allows `gllm-core<0.5.0`) so it coexists with `gllm-core>=0.4.37`. After editing any pin, always run `uv lock` and read the error — never assume "latest = compatible". Data-store-specific pin matrix and backend gotchas: see `references/datastore-gotchas.md`.
 
-## Known limitations of the CLI
+#### `tool.uv.sources` override trap
 
-These are bugs filed as GitHub issues on `delfianura/documentation-sync`. The LLM bridge must compensate for them manually:
+If `pyproject.toml` uses `tool.uv.sources` to redirect packages to `gen-ai-internal`, the resolver may still pick incompatible versions from that index. Symptom: `uv lock` resolves version X in `uv.lock`, but at runtime (`uv run`) an older/newer version is silently installed because the index returned a different version during sync. Always verify the actually-installed version after `uv sync`:
 
-1. **Multi-block pages** (Issue #1, partially fixed): `overwrite_script` now writes one file per Python block. But `create_entry` (for MISSING entries) still only uses the first block — manually create additional files for multi-block pages.
-2. **API drift detection is import-only** (Issue #4): The CLI checks if imported names exist in gl-sdk, but can't detect method renames or argument order changes. If a PR changes a method signature, the CLI won't flag it — manually diff the call site against the current API.
-3. **Gap detection is page→folder, not per-example** (Issue #5): If a parent directory exists with some files, a deleted sub-entry won't show as MISSING. Manually verify that every code block on the GitBook page has a corresponding `.py` file.
-4. **No stale link checker** (Issue #6): GitBook outbound links to the cookbook aren't validated. If you see a `github.com/gl-sdk/` or `github.com/GDP-ADMIN/gl-sdk-cookbook` link, it's probably stale — should be `github.com/gdplabs/gen-ai-sdk-cookbook`.
+```bash
+uv run python -c "import gllm_inference; print(gllm_inference.__version__)"
+```
+
+If the resolved version conflicts with `gllm-core` constraints, tighten the pin (e.g. `<0.6.98` instead of `<0.7.0`) and re-lock. When in doubt, delete `.venv` before re-syncing to avoid stale package retention:
+
+```bash
+rm -rf .venv
+uv lock && uv sync
+```
+
+#### `E402` (`load_dotenv()` before `gllm_*` imports) is intentional
+- `rm -rf .venv` before re-syncing if the runtime-installed version disagrees with `uv.lock`
+- accept `E402` as expected noise whenever `load_dotenv()` intentionally precedes `gllm_*` imports
+
+## Router verification playbook
+
+Router entries need more than a single README stub: every variant subdirectory also needs the standard boilerplate, and verification must use the router-specific notes in `references/routing-verification-notes.md`.
+
+Key points from that reference:
+- Hub + subdirectory boilerplate pattern for routing-style pages
+- Working `pyproject.toml` with `gllm-pipeline[llmrouter]` + `gllm-inference[openai]`
+- Runtime blocker: `gllm_pipeline.router` eager-imports `classifier_router` → `torch`; `ruff`/`py_compile` may pass while `uv run` still fails at import time
+- GitBook router credential shape mismatch (`credentials="..."` vs installed `{"api_key": "..."}`)
+- Retry pattern: delete `.venv` + `uv.lock` after editing `pyproject.toml`, then re-run `setup.sh`
+
+## GITBOOK_DRIFT: docs are wrong, not the cookbook
+
+`GITBOOK_DRIFT` is one of the entry states returned by `rago-sync detect`. It means *the
+GitBook page documents code that cannot possibly run against the currently published package* —
+an API that was renamed, removed, or never shipped to `main`.
+
+When you see `GITBOOK_DRIFT`:
+1. **Do not** run `rago-sync sync --entry`. That would fetch the broken example from GitBook
+   and overwrite the cookbook script, turning a `COMPLIANT` entry into `NOT_RUNNABLE`.
+2. **Do not** try to "fix" the cookbook to match the broken GitBook example.
+3. **Do** open a GitHub issue in `GDP-ADMIN/gl-sdk` linking the affected GitBook page and the
+   missing API name(s), tagged `documentation`.
+4. Re-run `rago-sync detect` **after** the docs PR merges and the page is corrected, then
+   continue with `sync --entry` + `verify`.
+
+Typical triggers for `GITBOOK_DRIFT`:
+- A `docs/gitbook-sync` commit advanced the tutorial prose ahead of `gl-sdk main` (e.g.
+  `docs(gllm-pipeline): add interrupted and resumable pipeline lifecycle into HITL guide`
+  was merged into `docs/gitbook-sync` before `enable_debug_tracing()` / `fork_from()` /
+  `Pipeline.resume()` / `Pipeline.get_state()` landed on `main`).
+- A docs PR for one feature accidentally rewrote an unrelated page with future-API copy-paste.
+- A page describes a `config=` key (e.g. `debug_state`, `context=`) that the current
+  `Pipeline.invoke` signature does not accept.
+
+Session-specific incident record: see `references/gitbook-drift-pipeline-how-to-jul2026.md`
+for the exact commit SHAs, method list, and corrective path for the July 2026 pipeline
+how-to page drift.
 
 ## Anti-pattern: carrying forward drift claims
 
@@ -498,5 +681,5 @@ Before writing any "X no longer exists" or "X changed to Y" claim in a PR body, 
 
 ## Source
 
-CLI source: `$RAGO_SYNC_DIR`
+CLI source: `/home/delfia-n-a-putri/Documents/Work/GEN_AI/Automation/rago-sync`
 GitHub: https://github.com/delfianura/documentation-sync
