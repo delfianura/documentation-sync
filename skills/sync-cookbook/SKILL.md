@@ -198,7 +198,7 @@ uv run rago-sync <command> [options]
 
 ### B. After `sync --entry` (before committing)
 
-`sync` overwrites the `.py` file from GitBook. Three things GitBook won't have that you must add:
+`sync` overwrites the `.py` file from GitBook. Four mandatory things GitBook won't have that you must add:
 
 1. **`release_resources()`** — if the script creates an invoker (`OpenAIEMInvoker`, `OpenAILMInvoker`, `AnthropicLMInvoker`, etc.), wrap usage in `try/finally`:
    ```python
@@ -213,7 +213,9 @@ uv run rago-sync <command> [options]
 
 2. **Self-contained script** — GitBook snippets may reference variables defined earlier in the tutorial (e.g. `vector_datastore` used but never assigned). Cookbook scripts must be standalone. Add missing definitions or note them in the PR description.
 
-3. **`load_dotenv()`** — if the script uses API keys, check that `load_dotenv()` is called and `.env.example` exists.
+3. **`load_dotenv()`** — if the script needs API keys, check that `load_dotenv()` is called and `.env.example` exists.
+
+4. **No side-effects at import time** — module body must not mutate global process state (`os.environ[...] = ...`, `logging.basicConfig(...)`), create files, or instantiate resource-holding objects (e.g. `logging.FileHandler("app.log")`). Wrap all such calls inside `main()` / `run_example()` guarded by `if __name__ == "__main__":`.
 
 ### C. Before opening a PR — mandatory verification
 
