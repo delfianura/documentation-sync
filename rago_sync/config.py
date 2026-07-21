@@ -1,19 +1,19 @@
 import os
 from pathlib import Path
 
-# Override on other machines via env vars, e.g.:
+# Configure paths via env vars (recommended) or a .env file at the repo root:
 #   export RAGO_SYNC_GL_SDK_REPO=/path/to/gl-sdk
 #   export RAGO_SYNC_COOKBOOK_REPO=/path/to/gen-ai-sdk-cookbook
-# Defaults below match the original author's machine layout.
+# Defaults are sibling-directory guesses and may not match your layout.
 GL_SDK_REPO = Path(os.environ.get(
     "RAGO_SYNC_GL_SDK_REPO",
-    "/home/delfia-n-a-putri/Documents/Work/GEN_AI/gl-sdk",
+    "../gl-sdk",
 ))
 COOKBOOK_REPO = Path(os.environ.get(
     "RAGO_SYNC_COOKBOOK_REPO",
-    "/home/delfia-n-a-putri/Documents/Work/GEN_AI/gen-ai-sdk-cookbook",
+    "../gen-ai-sdk-cookbook",
 ))
-GITBOOK_BRANCH = "origin/docs/gitbook-sync"
+GITBOOK_BRANCH = os.environ.get("RAGO_SYNC_GITBOOK_BRANCH", "origin/docs/gitbook-sync")
 GITBOOK_PREFIX = "gitbook/gen-ai-sdk"
 
 _TOOL_ROOT = Path(__file__).parent.parent

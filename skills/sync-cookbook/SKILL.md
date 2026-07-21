@@ -1,6 +1,6 @@
 ---
 name: sync-cookbook
-description: RAGO Sync — detect and fix drift between gl-sdk main → Gitbook → cookbook. Backed by the rago-sync Python CLI at /home/delfia-n-a-putri/Documents/Work/GEN_AI/Automation/rago-sync. Use for any drift detection, sync, verify, or status check.
+description: RAGO Sync — detect and fix drift between gl-sdk main → Gitbook → cookbook. Backed by the rago-sync Python CLI at $RAGO_SYNC_DIR. Use for any drift detection, sync, verify, or status check.
 ---
 
 # sync-cookbook
@@ -32,7 +32,7 @@ Sync is **not** a single monolithic operation. There are three distinct scenario
 1. Run `uv run rago-sync detect` to find `CONTENT_DRIFT` entries.
 2. For each drifted entry, inspect the current cookbook script vs the GitBook source:
    ```bash
-   cat /home/delfia-n-a-putri/Documents/Work/GEN_AI/gen-ai-sdk-cookbook/gen-ai/<entry_path>/*.py
+   cat $COOKBOOK_REPO/gen-ai/<entry_path>/*.py
    ```
 3. Run `uv run rago-sync sync --entry <path>` to overwrite from GitBook.
 4. Re-add `release_resources()`, `load_dotenv()`, and self-contained setup (GitBook snippets are fragments — see "GitBook fragments" below).
@@ -67,7 +67,7 @@ means *"the docs are wrong, not the cookbook"*.
 
 How to run (read-only — no edits, no commits):
 1. Switch to the gl-sdk worktree that has `.ai/workflows/gitbook-check-for-update.md`
-   (e.g. `~/Documents/Work/GEN_AI/gl-sdk` or any feature worktree derived from it).
+   (e.g. `$GL_SDK_REPO` or any feature worktree derived from it).
 2. Run the workflow in Mode 2 (no `$ARGUMENTS`) or Mode 1 (provide the relevant PR/branch).
    The workflow produces a structured gap report listing every affected GitBook file and its
    coverage classification.
@@ -167,9 +167,11 @@ Some GitBook tutorial pages are a **hub with variant subpages** instead of a sin
 
 For these:
 - The parent directory is a **real cookbook entry** and needs the standard boilerplate: `.env.example`, `.python-version`, `pyproject.toml`, `README.md`, `setup.bat`, `setup.sh`, `uv.lock`.
-- Each variant subdirectory also needs the same boilerplate because users need to `cd` into it and run `setup.sh` / `uv run python <script>.py`.
+- Each variant subdirectory **also** needs the same boilerplate because users need to `cd` into it and run `setup.sh` / `uv run python <script>.py`. User feedback: missing per-variant boilerplate is incomplete work.
 - The parent `README.md` should link to each subdirectory; each subdirectory `README.md` can be minimal or omitted if the parent links are sufficient.
-- Do **not** create routing examples if the installed `gllm-pipeline` router module cannot import cleanly at runtime — see `BLOCKED_ON_INFRA` in Entry states. Record the gap and continue; do not upload fragile wrappers.
+- When a variant needs extra deps, do not drop to reference-only by default. Add the necessary extra to the subdirectory `pyproject.toml` and attempt a real run. If the installed package still blocks at import time because a named backend is not available, document that exact blocker in the subdirectory README and keep the script in place—do not delete it.
+- Real runnable router examples must use runtime-loadable credentials (`os.getenv("OPENAI_API_KEY")`, with `load_dotenv()`), never a literal placeholder.
+- **Mandatory pre-push verification**: run each subdirectory's `setup.sh`, then `uv run python <script>.py`. If a script still fails at runtime because an optional dependency is missing, note it explicitly in the README and do not claim that page as `COMPLIANT`.
 
 ## CLI commands
 
@@ -187,7 +189,7 @@ For these:
 All commands run from the rago-sync project root:
 
 ```bash
-cd /home/delfia-n-a-putri/Documents/Work/GEN_AI/Automation/rago-sync
+cd $RAGO_SYNC_DIR
 uv run rago-sync <command> [options]
 ```
 
@@ -198,7 +200,7 @@ uv run rago-sync <command> [options]
 - PR #75 created `lm_invoker_basic_usage/` (prefixed folder) instead of `basic_usage/` (GitBook section heading). This required PR #88 to delete 11 prefixed duplicates and rename them.
 - Convention-based mapping can't handle pages where the GitBook heading doesn't match the folder slug.
 
-**A CSV mapping file exists** at `/home/delfia-n-a-putri/Documents/Work/GEN_AI/Automation/rago-sync/gitbook-to-cookbook-mapping.csv` (generated Jul 7, updated Jul 16). It has columns: `Type,GitBook Path,Cookbook Path,Status`. This is a snapshot, not a live lookup — but it MUST be kept in sync after structural changes.
+**A CSV mapping file exists** at `$RAGO_SYNC_DIR/gitbook-to-cookbook-mapping.csv` (generated Jul 7, updated Jul 16). It has columns: `Type,GitBook Path,Cookbook Path,Status`. This is a snapshot, not a live lookup — but it MUST be kept in sync after structural changes.
 
 **After any structural sync** (merging/restructuring cookbook directories), update the CSV to match the new layout — remove old entries that were deleted/merged, add new `SYNCED` entries for the new directories, and mark resource pages as `skip`. A stale CSV causes phantom `MISSING` results in future `detect` runs. New statuses: `SYNCED` (entry verified and up-to-date), `RESOURCE_PAGE` (not a tutorial, skip), `BLOCKED_ON_INFRA` (entry needs external infra to verify).
 
@@ -216,6 +218,7 @@ uv run rago-sync <command> [options]
 | `GITBOOK_DRIFT` | Gitbook code uses removed API | Opens GitHub issue (human fix) |
 | `NOT_RUNNABLE` | uv run fails | Retries; escalates if still failing |
 | `PENDING_REVIEW` | PR open for this entry | Paused until PR merged/closed |
+| `BLOCKED_ON_INFRA` | Needs optional backend/tooling not installable here | Manual README note + reference-only if unverifiable |
 
 ## Procedure: syncing a cookbook entry
 
@@ -223,14 +226,14 @@ uv run rago-sync <command> [options]
 
 1. Check sparse checkout — if `gen-ai/tutorials/` isn't checked out, everything shows as MISSING:
    ```bash
-   git -C /home/delfia-n-a-putri/Documents/Work/GEN_AI/gen-ai-sdk-cookbook sparse-checkout list
+   git -C $COOKBOOK_REPO sparse-checkout list
    # If missing:
-   git -C /home/delfia-n-a-putri/Documents/Work/GEN_AI/gen-ai-sdk-cookbook sparse-checkout add gen-ai/tutorials/retrieval
-   git -C /home/delfia-n-a-putri/Documents/Work/GEN_AI/gen-ai-sdk-cookbook checkout
+   git -C $COOKBOOK_REPO sparse-checkout add gen-ai/tutorials/retrieval
+   git -C $COOKBOOK_REPO checkout
    ```
 2. Verify branch is `main` (or the PR branch you're working on):
    ```bash
-   git -C /home/delfia-n-a-putri/Documents/Work/GEN_AI/gen-ai-sdk-cookbook branch --show-current
+   git -C $COOKBOOK_REPO branch --show-current
    ```
 
 ### B. After `sync --entry` (before committing)
@@ -326,8 +329,8 @@ This is the primary method for manual sync when the CLI is unavailable. Always c
 
 Always create a git worktree for sync edits — never work directly on `main`:
 ```bash
-cd /home/delfia-n-a-putri/Documents/Work/GEN_AI/gen-ai-sdk-cookbook
-git worktree add /home/delfia-n-a-putri/Documents/Work/GEN_AI/worktrees/sync-<scope> -b feat/sync-<scope>-tutorials main
+cd $COOKBOOK_REPO
+git worktree add $WORKTREE_DIR/sync-<scope> -b feat/sync-<scope>-tutorials main
 ```
 Set sparse checkout to include the tutorial directories you need:
 ```bash
@@ -494,7 +497,7 @@ Before starting sync work:
    ```
 3. Check the latest published version of the package:
    ```bash
-   pip index versions gllm-core --extra-index-url "https://oauth2accesstoken:$(gcloud auth print-access-token)@glsdk.gdplabs.id/gen-ai-internal/simple/" 2>&1 | head -3
+   uv pip index versions gllm-core --extra-index-url "https://oauth2accesstoken:$(gcloud auth print-access-token)@glsdk.gdplabs.id/gen-ai-internal/simple/" 2>&1 | head -3
    ```
 4. If a newer version exists than what's pinned in `pyproject.toml`, update the pin.
 
@@ -541,6 +544,22 @@ PYTHONPATH= uv run python <script>.py
 ### CONTENT_DRIFT sync overwrites the whole script
 
 `sync` replaces the `.py` file with code from GitBook. If the cookbook script has local additions not in GitBook, they will be lost. Always inspect before syncing.
+
+### Do not leave generated review artifacts in the repo
+
+Files like `COOKBOOK_REVIEW_REPORT.md` are session-specific review output. Delete them before pushing; they do not belong in the cookbook and will confuse future syncs.
+
+### Prefer `write_file` or direct Python edits over brittle patches for small files
+
+`patch` can fail with "unexpected end of file" on small inline rewrites. For single-file fixes, prefer:
+- `write_file` for full rewrites of small `.py` / markdown files
+- A short Python script using `pathlib.Path.write_text` for surgical replacements
+
+After any edit, read the file back and verify the change landed before running verification.
+
+### Verify subproject scripts from inside the subproject directory
+
+`uv run python <script>.py` must be run from the entry's own directory so the subproject `.venv` is selected. Running from a parent directory can pick up the wrong interpreter or missing dependencies.
 
 ### Folder naming: use section headings, not prefixed slugs
 
@@ -613,6 +632,25 @@ Pin the exact latest version: `>=0.6.90,<0.7.0`, not a rounded-down floor like `
 
 Each `gllm-*` package pins its own `gllm-core` floor/ceiling. Pinning every package to "the latest" independently can produce an **unsatisfiable** resolution. Real failure during the data_store sync (PR #92): `gllm-inference==0.6.98` requires `gllm-core>=0.4.21,<0.4.37`, but the latest published `gllm-core` was `0.4.37.post1` — `uv lock` failed with "your project's requirements are unsatisfiable". Fix: drop to `gllm-inference>=0.6.95,<0.7.0` (0.6.95 allows `gllm-core<0.5.0`) so it coexists with `gllm-core>=0.4.37`. After editing any pin, always run `uv lock` and read the error — never assume "latest = compatible". Data-store-specific pin matrix and backend gotchas: see `references/datastore-gotchas.md`.
 
+#### Cross-package import break (known GL SDK release hazard)
+
+Even when the resolver succeeds and `uv sync` completes, the installed packages may fail at **import time** because one package imports a symbol from another that was never published.
+
+**Observed July 2026**: `gllm-pipeline==0.5.18` imports `parallel_gather` from `gllm_core.concurrency`, but `gllm-core==0.4.24` (latest published at the same time) does not provide that symbol. Result: every cookbook script that imports `gllm_pipeline.pipeline` or `gllm_pipeline.steps` fails with `ImportError: cannot import name 'parallel_gather'` — before any cookbook logic runs. `ruff check` and `py_compile` still pass because the import is syntactically valid.
+
+**Resolution pattern**: if the cross-package break can be resolved locally by bumping only the cookbook entry's floor pin:
+1. Update cookbook `pyproject.toml` from `gllm-core==0.4.24` to `gllm-core>=0.4.37,<0.5.0` (lower-bound convention).
+2. Also patch the upstream package's own minimum requirement in the gl-sdk source tree, e.g.:
+   `libs/gllm-pipeline/pyproject.toml: "gllm-core>=0.3.0,<0.5.0"` → `"gllm-core>=0.4.37,<0.5.0"`.
+3. Commit + open a PR in `GDP-ADMIN/gl-sdk` with the title `fix(gllm-pipeline): bump gllm-core minimum to >=0.4.37`.
+4. If the user does not want the gl-sdk edit made directly, delegate it via the `ai-coding-agents` skill to Claude Code (Sonnet) so the cookbook fix and the upstream minimum-bump PR are produced in parallel.
+
+This two-sided fix prevents every future cookbook entry from hitting the same import wall.
+
+**Guardrail**: after `uv sync`, probe the installed packages with `scripts/verify_cross_package_imports.sh` before declaring `COMPLIANT`. The script tests the exact import chains the cookbook scripts need. If it fails, the GL SDK release is broken — file a GitHub issue in `GDP-ADMIN/gl-sdk` and mark the entry `BLOCKED_ON_INFRA`.
+
+**Re-run this probe after bumping any `gllm-*` version pin** — the next published `gllm-pipeline` may fix the issue, or may introduce a different cross-package break.
+
 #### `tool.uv.sources` override trap
 
 If `pyproject.toml` uses `tool.uv.sources` to redirect packages to `gen-ai-internal`, the resolver may still pick incompatible versions from that index. Symptom: `uv lock` resolves version X in `uv.lock`, but at runtime (`uv run`) an older/newer version is silently installed because the index returned a different version during sync. Always verify the actually-installed version after `uv sync`:
@@ -667,6 +705,15 @@ Typical triggers for `GITBOOK_DRIFT`:
 - A page describes a `config=` key (e.g. `debug_state`, `context=`) that the current
   `Pipeline.invoke` signature does not accept.
 
+Resolved drift sets — do not reopen as `GITBOOK_DRIFT` without re-verification:
+
+| Drift set | Resolution | Reference |
+|---|---|---|
+| Pipeline how-to pages (`execute-a-pipeline`, `debug-a-pipeline`, `human-in-the-loop`, `pausing-flow-for-debugging`) | All previously-missing APIs (`enable_debug_tracing`, `disable_debug_tracing`, `include_outputs_from`, `get_state`, `get_state_history`, `update_state`, `resume`, `fork_from`, `context=`) landed on `docs/gitbook-sync` HEAD `61a407b04`. Current four pages + three cookbook scripts all verified GREEN. | `references/gitbook-drift-pipeline-how-to-jul2026.md` (RESOLVED) |
+
+If you encounter these four pages again, re-run the API-grounding check from that reference
+before opening a new issue — `main` may have advanced further since the last check.
+
 Session-specific incident record: see `references/gitbook-drift-pipeline-how-to-jul2026.md`
 for the exact commit SHAs, method list, and corrective path for the July 2026 pipeline
 how-to page drift.
@@ -681,5 +728,5 @@ Before writing any "X no longer exists" or "X changed to Y" claim in a PR body, 
 
 ## Source
 
-CLI source: `/home/delfia-n-a-putri/Documents/Work/GEN_AI/Automation/rago-sync`
+CLI source: `$RAGO_SYNC_DIR`
 GitHub: https://github.com/delfianura/documentation-sync

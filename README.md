@@ -49,15 +49,22 @@ uv run rago-sync --help
 
 ## Configuration
 
-Paths are set in `rago_sync/config.py`:
+Paths are configured via environment variables (or a `.env` file — copy `.env.example` to `.env`):
 
-```python
-GL_SDK_REPO      = Path("/path/to/gl-sdk")
-COOKBOOK_REPO    = Path("/path/to/gen-ai-sdk-cookbook")
-GITBOOK_BRANCH   = "origin/docs/gitbook-sync"
+```bash
+export RAGO_SYNC_DIR=/path/to/documentation-sync      # this repo
+export RAGO_SYNC_GL_SDK_REPO=/path/to/gl-sdk           # gl-sdk checkout
+export RAGO_SYNC_COOKBOOK_REPO=/path/to/gen-ai-sdk-cookbook  # cookbook checkout
 ```
 
-Update these to match your local checkout locations before running.
+Defaults are `../gl-sdk` and `../gen-ai-sdk-cookbook` (sibling directories). Override them if your layout differs.
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `RAGO_SYNC_DIR` | _(repo root)_ | Path to this repo — used by skills |
+| `RAGO_SYNC_GL_SDK_REPO` | `../gl-sdk` | gl-sdk checkout with `gitbook/` and `libs/` |
+| `RAGO_SYNC_COOKBOOK_REPO` | `../gen-ai-sdk-cookbook` | gen-ai-sdk-cookbook checkout |
+| `RAGO_SYNC_GITBOOK_BRANCH` | `origin/docs/gitbook-sync` | Branch to diff against |
 
 ---
 
@@ -147,7 +154,9 @@ If you use Claude Code, you can trigger rago-sync with natural language or slash
 
 ```bash
 cp -r skills/sync-cookbook ~/.claude/skills/
-cp -r skills/rag-o-doc-sync-orchestrator ~/.claude/skills/
+cp -r skills/sync-docs ~/.claude/skills/
+cp -r skills/gitbook-update ~/.claude/skills/
+cp -r skills/gitbook-check-for-update ~/.claude/skills/
 ```
 
 Then in Claude Code:
@@ -178,5 +187,7 @@ rago_sync/
   reporter/           # HTML report + GitHub issue creation + email
 skills/
   sync-cookbook/      # Claude Code skill (LLM bridge to CLI)
-  rag-o-doc-sync-orchestrator/  # Full flow orchestrator skill
+  sync-docs/                # Entry point skill (scope + mode)
+  gitbook-update/            # GitBook editing skill
+  gitbook-check-for-update/  # Read-only gap analysis
 ```

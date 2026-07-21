@@ -39,7 +39,7 @@ Default to **ad-hoc** whenever a PR number, PR URL, branch name, or specific fea
 
 ## Ad-hoc procedure — GitBook side (scope = gitbook or both)
 
-1. **Identify the change.** `gh pr view <PR>` for the diff/summary. Search GitBook (`mcp__claude_ai_Gitbook__searchDocumentation`, then `getPage`) for the page(s) covering the changed component.
+1. **Identify the change.** `gh pr view <PR>` for the diff/summary. Search GitBook (`mcp__gitbook__searchDocumentation`, then `getPage`) for the page(s) covering the changed component.
 2. **Set up an isolated worktree on `docs/gitbook-sync`** — never edit that branch directly:
    ```bash
    git -C <gl-sdk-repo> fetch origin docs/gitbook-sync main
@@ -196,18 +196,18 @@ The cookbook repo may use sparse checkout. If `gen-ai/tutorials/` is not checked
 
 Before running detect, check:
 ```bash
-git -C $COOKBOOK_DIR sparse-checkout list
+git -C $COOKBOOK_REPO sparse-checkout list
 ```
 
 If the section you care about is missing, add it:
 ```bash
-git -C $COOKBOOK_DIR sparse-checkout add gen-ai/tutorials/inference
-git -C $COOKBOOK_DIR checkout
+git -C $COOKBOOK_REPO sparse-checkout add gen-ai/tutorials/inference
+git -C $COOKBOOK_REPO checkout
 ```
 
 Also verify the branch:
 ```bash
-git -C $COOKBOOK_DIR branch --show-current
+git -C $COOKBOOK_REPO branch --show-current
 ```
 
 If it is not `main`, switch first: `git -C ... checkout main`
@@ -218,7 +218,7 @@ If it is not `main`, switch first: `git -C ... checkout main`
 
 Before syncing CONTENT_DRIFT entries, inspect what will be overwritten:
 ```bash
-cat $COOKBOOK_DIR/gen-ai/<entry_path>/*.py
+cat $COOKBOOK_REPO/gen-ai/<entry_path>/*.py
 ```
 
 If the file has intentional local additions, do not run `sync` on that entry. Restore manually after if needed.

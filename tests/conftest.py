@@ -1,7 +1,18 @@
 import json
+import os
+import sys
+
 import pytest
 
 from rago_sync.state import EntryState, EntryStatus, StateManager
+
+# ── Isolate test environment from host PYTHONPATH pollution ──
+# Hermes agent sets PYTHONPATH to its own venv, which has an incompatible
+# click version. This ensures tests run against the project's own deps.
+os.environ.pop("PYTHONPATH", None)
+for _key in list(sys.path):
+    if ".hermes/hermes-agent" in _key:
+        sys.path.remove(_key)
 
 
 @pytest.fixture

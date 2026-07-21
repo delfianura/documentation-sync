@@ -55,3 +55,13 @@ These consistently pass because they don't invoke live LLMs:
 | `tutorials/core/logger_manager` | Core logger |
 | `tutorials/core/tool` | Core tool |
 | `tutorials/retrieval/chunk_processor` | Dedup only, no LLM |
+
+## `RuntimeWarning: coroutine 'main' was never awaited`
+
+GitBook often shows `async def main()` snippets where the body uses `asyncio.run(...)` internally. If you copy that pattern verbatim and call `main()` from `if __name__ == "__main__"` without `asyncio.run(main())`, Python emits this warning and the function body does not execute.
+
+**Fix**:
+- If the function body only calls `asyncio.run(...)` → change it to `def main()` and call it directly.
+- Otherwise → keep `async def main()` and use `if __name__ == "__main__": asyncio.run(main())`.
+
+Check for this immediately after creating a new script from a GitBook snippet; `uv run` stderr will contain the warning.

@@ -2,8 +2,8 @@
 import os, re, json
 from pathlib import Path
 
-GITBOOK = Path("/home/delfia-n-a-putri/Documents/Work/GEN_AI/dev5/gitbook/gen-ai-sdk")
-COOKBOOK = Path("/home/delfia-n-a-putri/Documents/Work/GEN_AI/gen-ai-sdk-cookbook/gen-ai")
+GITBOOK = Path(os.environ.get("RAGO_SYNC_GITBOOK_DIR", "gitbook/gen-ai-sdk"))
+COOKBOOK = Path(os.environ.get("RAGO_SYNC_COOKBOOK_REPO", "gen-ai-sdk-cookbook/gen-ai"))
 SKIP_DIRS = {'.git', '__pycache__', '.github', 'node_modules', '.venv', '.mypy_cache', '.pytest_cache', '.venv_build'}
 
 def slug(s):
@@ -11,7 +11,7 @@ def slug(s):
 
 def read_file(p):
     try: return p.read_text(encoding='utf-8', errors='replace')
-    except: return ''
+    except (OSError, UnicodeDecodeError): return ''
 
 def get_last_part(path):
     return path.rstrip('/').split('/')[-1]
@@ -135,7 +135,7 @@ for cb in sorted(cb_only):
 lines.append("")
 
 # ── Write output ──
-out = '/home/delfia-n-a-putri/Documents/Work/GEN_AI/dev5/gitbook-to-cookbook-mapping.md'
+out = os.environ.get('RAGO_SYNC_MAPPING_OUTPUT', 'gitbook-to-cookbook-mapping.md')
 with open(out, 'w') as f:
     f.write('\n'.join(lines) + '\n')
 print(f"Written to {out}")

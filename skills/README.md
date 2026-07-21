@@ -24,6 +24,7 @@ rago-sync Python CLI does the cookbook work
 Copy the skill directories into your Claude Code skills folder:
 
 ```bash
+cp -r skills/sync-cookbook ~/.claude/skills/
 cp -r skills/sync-docs ~/.claude/skills/
 cp -r skills/gitbook-update ~/.claude/skills/
 cp -r skills/gitbook-check-for-update ~/.claude/skills/
