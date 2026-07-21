@@ -12,6 +12,31 @@ Single entry point for keeping GitBook and the Cookbook in sync with gl-sdk. Del
 
 Do not reimplement GitBook-editing or cookbook-syncing logic here.
 
+## Step 0 — Setup (first run only)
+
+Before running any rago-sync command, check if the repo has a `.env` file. If not, create it from `.env.example`:
+
+```bash
+cp $RAGO_SYNC_DIR/.env.example $RAGO_SYNC_DIR/.env
+```
+
+Then ask the user for (or detect from their filesystem) the following paths and write them into `.env`:
+
+| Variable | What to set it to | How to detect |
+|---|---|---|
+| `RAGO_SYNC_DIR` | Path to this documentation-sync repo | `git rev-parse --show-toplevel` from the skill location |
+| `RAGO_SYNC_GL_SDK_REPO` | Path to gl-sdk checkout (has `gitbook/` and `libs/`) | `find ~ -maxdepth 4 -name gl-sdk -type d 2>/dev/null` |
+| `RAGO_SYNC_COOKBOOK_REPO` | Path to gen-ai-sdk-cookbook checkout (has `gen-ai/`) | `find ~ -maxdepth 4 -name gen-ai-sdk-cookbook -type d 2>/dev/null` |
+| `RAGO_SYNC_GITBOOK_DIR` | Path to GitBook docs inside gl-sdk (usually `$RAGO_SYNC_GL_SDK_REPO/gitbook/gen-ai-sdk`) | Append `/gitbook/gen-ai-sdk` to the gl-sdk path |
+
+After writing `.env`, source it for the current session:
+
+```bash
+set -a && source $RAGO_SYNC_DIR/.env && set +a
+```
+
+`.env` is gitignored — each user maintains their own personalized copy.
+
 ## Step 1 — Scope: GitBook, Cookbook, or both?
 
 Ask unless the request already makes it obvious. **Default: both** — "sync the docs" / "update docs for PR #X" implies both sides unless the user names just one.

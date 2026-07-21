@@ -39,6 +39,15 @@ cd documentation-sync
 uv sync
 ```
 
+Create a `.env` from the example template and fill in your local paths:
+
+```bash
+cp .env.example .env
+# Edit .env — set RAGO_SYNC_DIR, RAGO_SYNC_GL_SDK_REPO, RAGO_SYNC_COOKBOOK_REPO
+```
+
+`.env` is gitignored — each user maintains their own personalized copy.
+
 The CLI entry point is installed as `rago-sync`:
 
 ```bash
