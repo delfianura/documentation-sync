@@ -483,10 +483,12 @@ If a GitBook page is **prose/reference with no runnable blocks** (e.g., Routing)
 
 If a GitBook page adds new code blocks not in the map, the author must add them to `codeblock-map.yaml` and create the corresponding `.py` file. Run `verify_coverage.py` to confirm completeness. Collected failure patterns from standalone-wrapping GitBook snippets live in `references/standalone-failure-patterns.md`.
 
-### Import simplification checklist from PR #94 review
+### Import simplification checklist from PR #94 / #96 review
 
 After writing/editing cookbook `.py` files, normalize imports before committing:
-- Use `from gllm_pipeline.pipeline.pipeline import Pipeline` consistently across examples.
+- `Pipeline` → `from gllm_pipeline.pipeline import Pipeline` (not `...pipeline.pipeline`)
+- `transform` and other step helpers → `from gllm_pipeline.steps import transform` (not `...steps._func`)
+- Both have public re-exports in their `__init__.py` — prefer the shorter public path.
 - Placeholder `main` imports under `gllm_core.schema` are not a universal simplification target; only remove them when the file truly does not use the `@main` decorator.
 - For standalone scripts that need sibling imports, prefer direct parent-directory path injection rather than introducing `.agent_scripts` directories.
 - Accept `E402` as expected noise whenever `load_dotenv()` intentionally precedes package imports.
