@@ -178,13 +178,14 @@ Run the main page against `.ai/rules/gitbook-update-tutorials.md`. The data-stor
 
 - The merged main page keeps its `tutorials/data-store/README.md` path → cookbook entry path unchanged.
 - The deleted subpages (e.g. `build-data-store.md`, `basic-crud-and-methods.md`) had **no cookbook entries** if they were pure prose — confirm with `rago-sync status` / `detect` so you don't chase phantom MISSING entries.
-- If a deleted subpage DID have cookbook scripts, restructure the cookbook to mirror the merged page. The pattern from PR #92:
-  1. **Replace** the old multi-directory layout (e.g. `basic_crud_and_methods/` + `build_data_store/`) with a single `basic_usage/` directory.
-  2. **Create one `.py` per GitBook section** — not one per old entry directory. For data-store: `quickstart.py` → `#quick-start`, `capabilities.py` → `#using-the-store-end-to-end`, `builder.py` → `#build-a-data-store-from-configuration`.
-  3. **Remove `supported_datastores/`** if it was a resource page (not a tutorial) — the merged page links to it as a subpage, but the cookbook only mirrors tutorial pages.
-  4. **Add `legacy_data_store/`** for any legacy GitBook pages that still exist separately (e.g. `tutorials/data-store/legacy/vector-data-store`).
+- If a deleted subpage DID have cookbook scripts, restructure the cookbook to mirror the merged page:
+  1. **Replace** the old multi-directory layout with a single directory named after the merged page.
+  2. **Create one `.py` per GitBook section** — not one per old entry directory.
+  3. **Remove** any subdirectory that was a resource page (not a tutorial) — the cookbook only mirrors tutorial pages.
+  4. **Add** a directory for any legacy GitBook pages that still exist separately.
   5. **Update the parent `README.md`** with a table mapping each entry directory to its GitBook URL.
   6. Commit the restructure as a single commit — `git add` picks up renames automatically, so the diff is readable.
+  See `references/incident-log.md` for a worked example.
 
 ## Router / multi-variant tutorial layout
 
@@ -479,16 +480,23 @@ GitBook code blocks often omit boilerplate that `gllm-pipeline` requires at runt
 
 If a GitBook page is **prose/reference with no runnable blocks** (e.g., Routing), record it in the `README.md` as reference-only and skip `.py` creation rather than uploading fragile wrappers.
 
+#### Deliberately-illustrative vs. accidentally-incomplete blocks
+
+Some GitBook blocks are pseudocode on purpose — e.g. `steps=[]` in a builder-pattern example, or a bare `Pipeline(...)` call meant to show *shape*, not behavior. These are different from fragments that are simply missing a variable definition. Distinguish them before deciding how much to invent:
+
+- **Deliberately illustrative** (the block's own heading/prose says "example", "shape", or shows an empty/placeholder collection with no surrounding narrative implying real data): keep it close to the source — an empty `steps=[]` with a short comment explaining why is preferable to inventing content the page never showed. Don't manufacture business logic the page didn't ask for.
+- **Accidentally incomplete** (the block clearly assumes state from earlier prose, e.g. a variable used but never assigned, or a placeholder value like `<YOUR_...>`): fill only the minimum needed to make it import- and run-clean — a `TypedDict`/`BaseModel` stub, a trivial step function — and prefer using the block's own naming over inventing new concepts.
+
+When genuinely unsure which case applies, keep the invented surface area small and note the choice in the script's docstring or the PR description so a reviewer can correct it — don't silently expand scope.
+
 ### Multi-variant sections: one section, multiple files when justified
 
 If a GitBook page adds new code blocks not in the map, the author must add them to `codeblock-map.yaml` and create the corresponding `.py` file. Run `verify_coverage.py` to confirm completeness. Collected failure patterns from standalone-wrapping GitBook snippets live in `references/standalone-failure-patterns.md`.
 
-### Import simplification checklist from PR #94 / #96 review
+### Import simplification checklist
 
 After writing/editing cookbook `.py` files, normalize imports before committing:
-- `Pipeline` → `from gllm_pipeline.pipeline import Pipeline` (not `...pipeline.pipeline`)
-- `transform` and other step helpers → `from gllm_pipeline.steps import transform` (not `...steps._func`)
-- Both have public re-exports in their `__init__.py` — prefer the shorter public path.
+- Prefer a package's public re-export over its internal submodule path (e.g. `from gllm_pipeline.pipeline import Pipeline`, not `...pipeline.pipeline`; `from gllm_pipeline.steps import transform`, not `...steps._func`). Check the package's `__init__.py` for what it re-exports.
 - Placeholder `main` imports under `gllm_core.schema` are not a universal simplification target; only remove them when the file truly does not use the `@main` decorator.
 - For standalone scripts that need sibling imports, prefer direct parent-directory path injection rather than introducing `.agent_scripts` directories.
 - Accept `E402` as expected noise whenever `load_dotenv()` intentionally precedes package imports.
@@ -503,9 +511,7 @@ GitBook sometimes shows `async def main()` even when the function body only call
 
 Check for this immediately after creating a new script from a GitBook snippet.
 
-If a GitBook page adds new code blocks not in the map, the author must add them to `codeblock-map.yaml` and create the corresponding `.py` file. Run `verify_coverage.py` to confirm completeness. Collected failure patterns from standalone-wrapping GitBook snippets live in `references/standalone-failure-patterns.md`.
-
-### `async def main()` anti-pattern from GitBook copy-paste
+### Run ruff before committing
 
 After writing/editing cookbook `.py` files, run ruff:
 ```bash
@@ -539,7 +545,15 @@ Before starting sync work:
 ## Cookbook code conventions
 
 Every cookbook `.py` file should:
-- Have a module docstring with a reference link to the GitBook page (use `#anchor` for section-specific scripts)
+- Have a module docstring with a reference link to the GitBook page (use `#anchor` for section-specific scripts), formatted as a block, not a single line:
+  ```python
+  """<one-line summary of what the script demonstrates>.
+
+  References:
+      https://gdplabs.gitbook.io/sdk/gen-ai-sdk/tutorials/<path>#<anchor>
+  """
+  ```
+- Give `main()` (and any other non-trivial function) a one-line docstring describing what it does.
 - Use `async def main()` + `if __name__ == "__main__": asyncio.run(main())` (or `def main()` for sync-only scripts)
 - **GitBook often shows `async def main()` with `asyncio.run(...)` inside the body** — calling `main()` directly produces `RuntimeWarning: coroutine 'main' was never awaited`. Fix by changing `main()` to `def main()` when it internally uses `asyncio.run(...)`.
 - Call `release_resources()` on all invokers in a `finally` block
@@ -598,7 +612,7 @@ After any edit, read the file back and verify the change landed before running v
 
 ### Folder naming: use section headings, not prefixed slugs
 
-PR #75 created folders like `lm_invoker_basic_usage/` by prefixing the parent directory name. PR #88 had to delete 11 such prefixed duplicates and rename them to `basic_usage/`, `context_management/`, etc. When creating new entries, use the GitBook section heading as the folder name — not a slug derived from the full path.
+When creating new entries, use the GitBook section heading as the folder name — not a slug derived from the full path or convention-based prefixing. See `references/incident-log.md` for the failure this rule prevents.
 
 ### Worktree sparse checkout does not inherit from parent repo
 
@@ -633,17 +647,9 @@ This means:
 - `uv run python <router_script>.py` may still fail at import time.
 - Do not mark router coverage as fully verified until the actual import path is resolved; record it as `BLOCKED_ON_INFRA` / reference-only in the README until the package installs the optional `torch` dependency or its `__init__` stops eagerly importing classifier backends.
 
-### GitBook router credential shape may be stale
+### GitBook credential shape may lag the installed API
 
-The live GitBook routing pages still show:
-```python
-credentials="<YOUR_OPENAI_API_KEY>"
-```
-but the installed `gllm-pipeline v0.5.18` `build_em_invoker` / `build_lm_request_processor` APIs expect credentials as a mapping:
-```python
-credentials={"api_key": "<YOUR_OPENAI_API_KEY>"}
-```
-When manually syncing router examples, ground the credential shape against the currently installed package, not the GitBook prose.
+GitBook prose and code blocks can drift from the currently installed package's actual function signature — e.g. a credential argument documented as a bare string when the installed API expects a mapping (or vice versa). When manually syncing any example that passes credentials, ground the shape against the currently installed package's signature, not the GitBook prose. See `references/incident-log.md` for an observed instance.
 
 ### Token expiry mid-run
 
@@ -665,22 +671,19 @@ Pin the exact latest version: `>=0.6.90,<0.7.0`, not a rounded-down floor like `
 
 #### Cross-package compatibility (critical)
 
-Each `gllm-*` package pins its own `gllm-core` floor/ceiling. Pinning every package to "the latest" independently can produce an **unsatisfiable** resolution. Real failure during the data_store sync (PR #92): `gllm-inference==0.6.98` requires `gllm-core>=0.4.21,<0.4.37`, but the latest published `gllm-core` was `0.4.37.post1` — `uv lock` failed with "your project's requirements are unsatisfiable". Fix: drop to `gllm-inference>=0.6.95,<0.7.0` (0.6.95 allows `gllm-core<0.5.0`) so it coexists with `gllm-core>=0.4.37`. After editing any pin, always run `uv lock` and read the error — never assume "latest = compatible". Data-store-specific pin matrix and backend gotchas: see `references/datastore-gotchas.md`.
+Each `gllm-*` package pins its own `gllm-core` floor/ceiling. Pinning every package to "the latest" independently can produce an **unsatisfiable** resolution — a newer package's floor pin may exceed the latest published version of a dependency it shares with another package. Fix: relax the offending package's pin to a version whose own floor is compatible with what's actually published. After editing any pin, always run `uv lock` and read the error — never assume "latest = compatible". See `references/incident-log.md` for a worked example and `references/datastore-gotchas.md` for the data-store pin matrix and backend gotchas.
 
 #### Cross-package import break (known GL SDK release hazard)
 
-Even when the resolver succeeds and `uv sync` completes, the installed packages may fail at **import time** because one package imports a symbol from another that was never published.
-
-**Observed July 2026**: `gllm-pipeline==0.5.18` imports `parallel_gather` from `gllm_core.concurrency`, but `gllm-core==0.4.24` (latest published at the same time) does not provide that symbol. Result: every cookbook script that imports `gllm_pipeline.pipeline` or `gllm_pipeline.steps` fails with `ImportError: cannot import name 'parallel_gather'` — before any cookbook logic runs. `ruff check` and `py_compile` still pass because the import is syntactically valid.
+Even when the resolver succeeds and `uv sync` completes, the installed packages may fail at **import time** because one package imports a symbol from another that was never published at the resolved version. `ruff check` and `py_compile` still pass because the import is syntactically valid — only `uv run` (actual execution) surfaces it.
 
 **Resolution pattern**: if the cross-package break can be resolved locally by bumping only the cookbook entry's floor pin:
-1. Update cookbook `pyproject.toml` from `gllm-core==0.4.24` to `gllm-core>=0.4.37,<0.5.0` (lower-bound convention).
-2. Also patch the upstream package's own minimum requirement in the gl-sdk source tree, e.g.:
-   `libs/gllm-pipeline/pyproject.toml: "gllm-core>=0.3.0,<0.5.0"` → `"gllm-core>=0.4.37,<0.5.0"`.
-3. Commit + open a PR in `GDP-ADMIN/gl-sdk` with the title `fix(gllm-pipeline): bump gllm-core minimum to >=0.4.37`.
+1. Update the cookbook entry's `pyproject.toml` to a floor pin on the dependency that publishes the missing symbol.
+2. Also patch the upstream package's own minimum requirement in the gl-sdk source tree (`libs/<package>/pyproject.toml`) so future installs don't regress.
+3. Commit + open a PR in `GDP-ADMIN/gl-sdk` bumping the minimum.
 4. If the user does not want the gl-sdk edit made directly, delegate it via the `ai-coding-agents` skill to Claude Code (Sonnet) so the cookbook fix and the upstream minimum-bump PR are produced in parallel.
 
-This two-sided fix prevents every future cookbook entry from hitting the same import wall.
+This two-sided fix prevents every future cookbook entry from hitting the same import wall. See `references/incident-log.md` for a worked example.
 
 **Guardrail**: after `uv sync`, probe the installed packages with `scripts/verify_cross_package_imports.sh` before declaring `COMPLIANT`. The script tests the exact import chains the cookbook scripts need. If it fails, the GL SDK release is broken — file a GitHub issue in `GDP-ADMIN/gl-sdk` and mark the entry `BLOCKED_ON_INFRA`.
 
