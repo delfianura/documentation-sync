@@ -7,6 +7,31 @@ description: RAGO Sync — detect and fix drift between gl-sdk main → Gitbook 
 
 LLM bridge to the rago-sync CLI. All logic lives in Python — this skill maps intent to the right command and ensures cookbook code conventions are followed.
 
+## Step 0 — Setup (first run only)
+
+Before running any rago-sync command, check if `$RAGO_SYNC_DIR/.env` exists. If it does **not**, create it from `.env.example` and fill in the user's actual paths:
+
+```bash
+cp $RAGO_SYNC_DIR/.env.example $RAGO_SYNC_DIR/.env
+```
+
+Then ask the user for (or detect from their filesystem) the following paths and write them into `.env`:
+
+| Variable | What to set it to | How to detect |
+|---|---|---|
+| `RAGO_SYNC_DIR` | Path to this documentation-sync repo | `git rev-parse --show-toplevel` from the skill location |
+| `RAGO_SYNC_GL_SDK_REPO` | Path to gl-sdk checkout (has `gitbook/` and `libs/`) | `find ~ -maxdepth 4 -name gl-sdk -type d 2>/dev/null` |
+| `RAGO_SYNC_COOKBOOK_REPO` | Path to gen-ai-sdk-cookbook checkout (has `gen-ai/`) | `find ~ -maxdepth 4 -name gen-ai-sdk-cookbook -type d 2>/dev/null` |
+| `RAGO_SYNC_GITBOOK_DIR` | Path to GitBook docs inside gl-sdk (usually `$RAGO_SYNC_GL_SDK_REPO/gitbook/gen-ai-sdk`) | Append `/gitbook/gen-ai-sdk` to the gl-sdk path |
+
+After writing `.env`, source it for the current session:
+
+```bash
+set -a && source $RAGO_SYNC_DIR/.env && set +a
+```
+
+**Do not skip this step.** Every subsequent command (`uv run rago-sync detect`, `sync`, `verify`) depends on these paths being set. `.env` is gitignored — each user maintains their own copy.
+
 ## When to sync (trigger taxonomy)
 
 Sync is **not** a single monolithic operation. There are three distinct scenarios, each with a different workflow:
@@ -457,6 +482,14 @@ If a GitBook page is **prose/reference with no runnable blocks** (e.g., Routing)
 ### Multi-variant sections: one section, multiple files when justified
 
 If a GitBook page adds new code blocks not in the map, the author must add them to `codeblock-map.yaml` and create the corresponding `.py` file. Run `verify_coverage.py` to confirm completeness. Collected failure patterns from standalone-wrapping GitBook snippets live in `references/standalone-failure-patterns.md`.
+
+### Import simplification checklist from PR #94 review
+
+After writing/editing cookbook `.py` files, normalize imports before committing:
+- Use `from gllm_pipeline.pipeline.pipeline import Pipeline` consistently across examples.
+- Placeholder `main` imports under `gllm_core.schema` are not a universal simplification target; only remove them when the file truly does not use the `@main` decorator.
+- For standalone scripts that need sibling imports, prefer direct parent-directory path injection rather than introducing `.agent_scripts` directories.
+- Accept `E402` as expected noise whenever `load_dotenv()` intentionally precedes package imports.
 
 ### `async def main()` anti-pattern from GitBook copy-paste
 

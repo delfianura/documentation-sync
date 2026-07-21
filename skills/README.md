@@ -21,7 +21,7 @@ rago-sync Python CLI does the cookbook work
 
 ## Installation
 
-Copy the skill directories into your Claude Code skills folder:
+### 1. Copy skills into your Claude Code skills folder
 
 ```bash
 cp -r skills/sync-cookbook ~/.claude/skills/
@@ -30,17 +30,31 @@ cp -r skills/gitbook-update ~/.claude/skills/
 cp -r skills/gitbook-check-for-update ~/.claude/skills/
 ```
 
-Then verify Claude Code picks them up:
+### 2. Set up environment variables
+
+Copy the `.env.example` from the rago-sync repo to `.env` and fill in your paths:
 
 ```bash
-claude /skills   # should list sync-docs, gitbook-update, gitbook-check-for-update
+cd /path/to/documentation-sync
+cp .env.example .env
+# Edit .env — set RAGO_SYNC_DIR, RAGO_SYNC_GL_SDK_REPO, RAGO_SYNC_COOKBOOK_REPO
 ```
 
-Paths are environment-overridable (see `rago_sync/config.py`), so this works on any machine, not just the original author's:
+Or export them inline:
 
 ```bash
+export RAGO_SYNC_DIR=/path/to/documentation-sync
 export RAGO_SYNC_GL_SDK_REPO=/path/to/gl-sdk
 export RAGO_SYNC_COOKBOOK_REPO=/path/to/gen-ai-sdk-cookbook
+```
+
+`.env` is gitignored — each user maintains their own personalized copy.
+
+### 3. Verify
+
+```bash
+claude /skills   # should list sync-cookbook, sync-docs, gitbook-update, gitbook-check-for-update
+uv run rago-sync --help   # from $RAGO_SYNC_DIR
 ```
 
 ---
